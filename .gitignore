@@ -1,0 +1,13 @@
+*.wav
+*.mp3
+*.mp4
+*.log
+.env
+config.json
+__pycache__/
+venv/
+node_modules/
+src/query.json
+src/ftpphp.py
+
+
