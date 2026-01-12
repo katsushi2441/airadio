@@ -138,7 +138,7 @@ def ollama_generate(prompt):
 def tts_generate(text):
     payload = {
         "text": text,
-        "speaker": 11
+        "speaker": 2
     }
     r = requests.post(TTS_URL, json=payload, timeout=120)
     r.raise_for_status()

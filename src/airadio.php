@@ -198,6 +198,9 @@ function build_prompt($news_items) {
 - 出力は必ず、番組本文の最初のセリフから書き始めること。
 - 先頭の一文は、すぐに内容に入る自然な日本語の文章にすること。
 - 先頭の文字は必ず日本語の本文から始めること。
+
+# 開始文（この一文から必ず書き始めること・改変禁止）
+- {keyword}に関するニュースです。
 ";
 
     return $prompt;
@@ -225,7 +228,7 @@ function ollama_generate_script($prompt) {
 function tts_generate_audio($text) {
     $payload = [
         "text" => $text,
-        "speaker" => 11
+        "speaker" => 2
     ];
 
     list($ok, $raw, $code, $data) = http_post_json(TTS_URL, $payload, 120);
