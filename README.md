@@ -1,14 +1,47 @@
 # AI Radio Generator
 
-AI Radio Generator is an **early-stage open-source AI pipeline** that converts news
-articles or keywords into short radio-style audio programs and
-podcast-compatible RSS feeds.
+AI Radio Generator is an automated AI project that generates
+radio-style audio episodes and podcast-compatible RSS feeds
+from news articles or keywords.
 
-This project provides the **core technical foundation** for generating and distributing
-AI-powered audio content without manual recording or editing.
-It is designed as an experimental and extensible media automation system.
+Users receive ready-to-publish audio files and RSS feeds
+without manual recording, editing, or voice work.
+
+This project focuses on clarity, automation, and practical
+AI-powered content generation.
 
 ---
+
+## What this project does
+
+AI Radio Generator provides a complete, automated workflow:
+
+- Ingests news articles or keyword-based content
+- Generates radio-style scripts using large language models (LLMs)
+- Converts scripts into natural-sounding speech via text-to-speech
+- Outputs audio files and updates podcast-compatible RSS feeds
+
+All steps are executed automatically.
+
+---
+
+## What users get (Outputs)
+
+- 🎧 Radio-style audio episodes (WAV / MP3)
+- 📡 Podcast-compatible RSS feeds ready for distribution
+- ⚙️ Fully automated pipeline with no manual recording or editing
+
+These outputs can be directly published to podcast platforms
+or used as AI-generated audio content.
+
+---
+
+## Who this project is for
+
+- Content creators who want automated audio generation
+- Educators looking for spoken summaries or AI narration
+- Developers exploring AI-powered media pipelines
+- Podcasters experimenting with automated content production
 
 ## What this repository provides
 
@@ -46,15 +79,6 @@ All steps are automated and require no manual editing or voice recording.
 
 ---
 
-## Example outputs
-
-- ▶ Sample audio: https://YOUR_AUDIO_SAMPLE_URL
-- ▶ Sample RSS feed: https://YOUR_RSS_SAMPLE_URL
-
-(Replace the URLs above with actual generated examples.)
-
----
-
 ## Who it’s for
 
 - Developers interested in AI-powered media pipelines
@@ -85,15 +109,12 @@ All steps are automated and require no manual editing or voice recording.
 
 ## Repository structure
 
-```text
-.
 ├── src/
 │   ├── airadio.php        # Core PHP logic for orchestration and generation flow
 │   ├── airadio.py         # Python-based AI script generation logic
 │   ├── ttsfile.php        # TTS integration and audio file handling
 │   ├── tts2blog.py        # Audio/text processing utilities
 │   ├── rss.php            # Podcast-compatible RSS feed generation
-│   └── ...
 ├── README.md
 ├── LICENSE
 └── .gitignore
