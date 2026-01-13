@@ -1,18 +1,24 @@
 # AI Radio Generator
 
-An open-source AI-powered radio generator that automatically creates short audio programs from news and structured data.
+An open-source AI-powered radio generator that automatically creates short radio-style audio programs from news and structured data.
+
+## What this repository provides
+
+This repository provides the **core open-source implementation** of an AI-based radio generation pipeline.
+It focuses on script generation, text-to-speech integration, and RSS feed output.
+This is an early-stage project intended for experimentation and extension.
 
 ## Features
 - Automatic script generation from news and keywords
 - AI-based text-to-speech (TTS)
-- RSS feed generation (Spotify-compatible)
-- Designed for automated audio publishing
+- RSS feed generation for podcast distribution
+- Designed for automated and independent audio publishing
 
 ## Use Cases
-- Independent AI radio
-- Automated podcasts
-- Educational audio content
-- Experimental media automation
+- Independent AI radio experiments
+- Automated podcast generation
+- Educational and informational audio content
+- Experimental media automation workflows
 
 ## Project Structure
 
@@ -30,28 +36,4 @@ All core logic is located in the `src/` directory.
 
 - `airadio.py`  
   Python-based script generation logic.
-  Responsible for transforming news or structured data into radio-style scripts using AI.
-
-- `tts2blog.py`  
-  Utility script that converts generated scripts into audio-ready formats
-  and supports publishing or blogging workflows.
-
-- `ttsfile.php`  
-  Handles text-to-speech file generation and audio output management.
-
-  ## Roadmap
-
-- Improve modularization of the generation pipeline
-- Add configuration examples for easier setup
-- Enhance RSS and podcast distribution support
-- Documentation and usage examples
-
-## Status
-This project is under active development.
-Early users, feedback, and contributors are welcome.
-
-## License
-MIT
-
-
-
+  Responsible for transforming news or struct
