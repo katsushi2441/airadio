@@ -141,6 +141,7 @@ function fetch_news_items() {
 }
 
 function build_prompt($news_items) {
+    global $keyword;
     $today = date("Y-m-d H:i");
     $lines = [];
     $i = 1;
@@ -200,7 +201,7 @@ function build_prompt($news_items) {
 - 先頭の文字は必ず日本語の本文から始めること。
 
 # 開始文（この一文から必ず書き始めること・改変禁止）
-- {keyword}に関するニュースです。
+- {$keyword}に関するニュースです。
 ";
 
     return $prompt;
@@ -254,6 +255,8 @@ $err = "";
 $news_items = [];
 $script = "";
 $audio_url = "";
+$keyword = isset($_POST["keyword"]) ? (string)$_POST["keyword"] : "";
+
 
 // -------------------------
 // file指定で台本を読み込む
