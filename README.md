@@ -77,6 +77,20 @@ or used as AI-generated audio content.
 - Python and PHP-based automation scripts
 
 ---
+## Voicebox (Text-to-Speech Control)
+
+This project includes an optional Voicebox layer for controlling
+the Text-to-Speech (TTS) engine via both UI and API.
+
+- A lightweight web-based UI for manual testing and tuning
+- A Python-based API server that wraps the VOICEVOX engine
+- Designed to be reusable by AI Radio and other automation scripts
+
+This separation allows flexible use:
+manual testing via browser, or fully automated audio generation
+from scripts.
+
+---
 
 ## Repository structure
 
