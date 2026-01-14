@@ -234,6 +234,60 @@ audio {
     margin-bottom:10px;
     font-weight:600;
 }
+/* ================================
+   スマホ対応（CSSのみ）
+================================ */
+@media screen and (max-width: 768px) {
+
+    table,
+    thead,
+    tbody,
+    tr,
+    th,
+    td {
+        display: block;
+        width: 100%;
+    }
+
+    thead {
+        display: none;
+    }
+
+    tr {
+        margin-bottom: 16px;
+        padding: 12px;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        background: #fff;
+    }
+
+    td {
+        border: none;
+        padding: 6px 0;
+    }
+
+    td a {
+        word-break: break-all;
+    }
+
+    audio {
+        width: 100%;
+    }
+
+    .muted {
+        font-size: 13px;
+        line-height: 1.6;
+        max-height: 4.8em;   /* 約3行 */
+        overflow: hidden;
+    }
+
+    .btn-blog,
+    .btn-del {
+        width: 100%;
+        margin-top: 6px;
+    }
+}
+
 </style>
 </head>
 <body>
@@ -307,4 +361,5 @@ Blogger投稿
 </div>
 </body>
 </html>
+
 

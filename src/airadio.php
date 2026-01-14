@@ -23,6 +23,25 @@ define("TTS_URL", "http://exbridge.ddns.net:8002/tts");
 define("NEWS_LIMIT", 8);
 
 // -------------------------
+// VOICE プロファイル読込
+// -------------------------
+$voice_profile = [
+    "speaker" => 2,
+    "speed" => 1.0,
+    "pitch" => 0.0,
+    "intonation" => 1.0,
+    "volume" => 1.0,
+];
+
+$profile_file = __DIR__ . "/voice_profile.json";
+if (file_exists($profile_file)) {
+    $json = json_decode(file_get_contents($profile_file), true);
+    if (is_array($json)) {
+        $voice_profile = array_merge($voice_profile, $json);
+    }
+}
+
+// -------------------------
 // ユーティリティ
 // -------------------------
 function append_audio_log($audio_url, $keyword, $script) {
@@ -227,9 +246,15 @@ function ollama_generate_script($prompt) {
 }
 
 function tts_generate_audio($text) {
+    global $voice_profile;
+
     $payload = [
         "text" => $text,
-        "speaker" => 2
+        "speaker" => (int)$voice_profile["speaker"],
+        "speed" => (float)$voice_profile["speed"],
+        "pitch" => (float)$voice_profile["pitch"],
+        "intonation" => (float)$voice_profile["intonation"],
+        "volume" => (float)$voice_profile["volume"],
     ];
 
     list($ok, $raw, $code, $data) = http_post_json(TTS_URL, $payload, 120);
@@ -445,4 +470,5 @@ if (isset($_POST["tts"])) {
 </div>
 </body>
 </html>
+
 

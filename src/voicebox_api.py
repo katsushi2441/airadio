@@ -61,7 +61,7 @@ def tts(req: TTS):
 
     audio = r2.content
 
-    outdir = Path("tts")
+    outdir = Path("../../tts")
     outdir.mkdir(exist_ok=True)
     fname = f"{uuid.uuid4().hex}.wav"
     path = outdir / fname
@@ -74,7 +74,7 @@ def tts(req: TTS):
 # =========================
 # TTS ファイル管理
 # =========================
-AUDIO_DIR = Path("tts").resolve()
+AUDIO_DIR = Path("../../tts").resolve()
 
 class DeleteRequest(BaseModel):
     file: str

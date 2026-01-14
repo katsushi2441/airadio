@@ -3,7 +3,7 @@ import glob
 import subprocess
 import os
 
-img_path = "../../airadio_simpsons.png"
+img_path = "../../airadio.png"
 tts_dir = "../../tts"
 
 if not os.path.isfile(img_path):
