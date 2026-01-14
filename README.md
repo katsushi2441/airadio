@@ -78,6 +78,13 @@ extension, and independent deployment.
 All steps are automated and require no manual editing or voice recording.
 
 ---
+## Example outputs
+
+- ▶ Sample audio: https://exbridge.ddns.net/aidexx/tts/2243b1178ef34e2698a5037bd26ba1d9.wav
+- ▶ Sample RSS feed: https://exbridge.jp/aidexx/rss.xml
+
+
+---
 
 ## Who it’s for
 
