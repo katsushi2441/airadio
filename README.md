@@ -7,9 +7,6 @@ from news articles or keywords.
 Users receive ready-to-publish audio files and RSS feeds
 without manual recording, editing, or voice work.
 
-This project focuses on clarity, automation, and practical
-AI-powered content generation.
-
 ---
 
 ## What this project does
@@ -25,7 +22,7 @@ All steps are executed automatically.
 
 ---
 
-## What users get (Outputs)
+## Outputs (What users get)
 
 - 🎧 Radio-style audio episodes (WAV / MP3)
 - 📡 Podcast-compatible RSS feeds ready for distribution
@@ -38,33 +35,17 @@ or used as AI-generated audio content.
 
 ## Who this project is for
 
-- Content creators who want automated audio generation
-- Educators looking for spoken summaries or AI narration
-- Developers exploring AI-powered media pipelines
-- Podcasters experimenting with automated content production
-
-## What this repository provides
-
-This repository contains the open-source implementation of an automated
-AI radio generation pipeline, including:
-
-- Script generation from news or structured text using AI
-- Text-to-speech (TTS) integration for audio output
-- Podcast-compatible RSS feed generation
-- Automation-oriented architecture for self-hosted deployment
-
-This is **not a finished service**, but a reusable technical base for experimentation,
-extension, and independent deployment.
+- Content creators experimenting with automated audio generation
+- Educators exploring spoken summaries and AI narration
+- Developers interested in AI-powered media pipelines
+- Independent media projects and research prototypes
 
 ---
 
-## What you get
+## Example outputs
 
-- 🎧 Automatically generated radio-style audio episodes (WAV / MP3)
-- 📡 Podcast-compatible RSS feeds ready for distribution
-- 🧠 AI-generated scripts using large language models (LLMs)
-- 🔊 Text-to-speech synthesis for natural audio output
-- ⚙️ Fully automated workflow from input to publication
+- ▶ Sample audio: https://exbridge.ddns.net/aidexx/tts/2243b1178ef34e2698a5037bd26ba1d9.wav
+- ▶ Sample RSS feed: https://exbridge.jp/aidexx/rss.xml
 
 ---
 
@@ -73,31 +54,14 @@ extension, and independent deployment.
 1. Ingests news articles via RSS feeds or keyword-based search
 2. Generates radio-style scripts using an LLM
 3. Converts scripts into speech using a TTS engine
-4. Outputs audio files and updates podcast-compatible RSS feeds
-
-All steps are automated and require no manual editing or voice recording.
-
----
-## Example outputs
-
-- ▶ Sample audio: https://exbridge.ddns.net/aidexx/tts/2243b1178ef34e2698a5037bd26ba1d9.wav
-- ▶ Sample RSS feed: https://exbridge.jp/aidexx/rss.xml
-
+4. Processes audio/text for publishing
+5. Outputs audio files and updates podcast-compatible RSS feeds
 
 ---
 
-## Who it’s for
+## Key features
 
-- Developers interested in AI-powered media pipelines
-- Content creators experimenting with automated audio generation
-- Educators exploring spoken summaries and AI narration
-- Independent media projects and research prototypes
-
----
-
-## Features
-
-- Fully automated end-to-end pipeline
+- Fully automated end-to-end AI pipeline
 - News-to-audio conversion
 - Modular architecture (script generation, TTS, publishing)
 - Self-hosted and customizable
@@ -107,20 +71,22 @@ All steps are automated and require no manual editing or voice recording.
 
 ## Tech stack
 
-- Large Language Models (LLMs) for script generation
-- Text-to-Speech (TTS) engines for audio synthesis
-- RSS generation for podcast distribution
+- Large Language Models (LLMs)
+- Text-to-Speech (TTS)
+- Podcast-compatible RSS generation
 - Python and PHP-based automation scripts
 
 ---
 
 ## Repository structure
 
+```text
+.
 ├── src/
-│   ├── airadio.php        # Core PHP logic for orchestration and generation flow
-│   ├── airadio.py         # Python-based AI script generation logic
+│   ├── airadio.php        # Core PHP orchestration logic
+│   ├── airadio.py         # Python-based AI script generation
 │   ├── ttsfile.php        # TTS integration and audio file handling
-│   ├── tts2blog.py        # Audio/text processing utilities
+│   ├── tts2blog.py        # Audio/text post-processing and publishing utilities
 │   ├── rss.php            # Podcast-compatible RSS feed generation
 ├── README.md
 ├── LICENSE
