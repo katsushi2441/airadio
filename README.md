@@ -91,3 +91,12 @@ or used as AI-generated audio content.
 ├── README.md
 ├── LICENSE
 └── .gitignore
+
+---
+
+## Extensibility
+
+The project is designed with a modular architecture, making it easy
+to extend or customize individual components such as script generation,
+text-to-speech, or publishing workflows for different use cases.
+
