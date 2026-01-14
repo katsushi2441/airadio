@@ -88,6 +88,8 @@ or used as AI-generated audio content.
 │   ├── ttsfile.php        # TTS integration and audio file handling
 │   ├── tts2blog.py        # Audio/text post-processing and publishing utilities
 │   ├── rss.php            # Podcast-compatible RSS feed generation
+│   ├── voicebox_ui.php    # Web UI for manual TTS testing and control
+│   └── voicebox_api.py    # Python API server wrapping VOICEVOX engine
 ├── README.md
 ├── LICENSE
 └── .gitignore
