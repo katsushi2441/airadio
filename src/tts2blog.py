@@ -5,6 +5,7 @@
 # ※ 台本は stdin から受け取る（PHPサーバから送信）
 # =====================================================
 
+import json
 import sys
 import smtplib
 from email.mime.text import MIMEText
@@ -13,11 +14,17 @@ from email.header import Header
 # =====================================================
 # Blogger メール設定（y2blog.py と同一）
 # =====================================================
-FROM = "bm@exbridge.jp"
-PASSWORD = "Xbrg20042441"   # ダミー
-TO = "katsushi2441.xbrg@blogger.com"
-SMTP_HOST = "mail18.heteml.jp"
-SMTP_PORT = 465
+CONFIG_FILE = __file__.replace("tts2blog.py", "blogger_config.json")
+
+with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+    cfg = json.load(f)
+
+FROM = cfg["FROM"]
+PASSWORD = cfg["PASSWORD"]
+TO = cfg["TO"]
+SMTP_HOST = cfg["SMTP_HOST"]
+SMTP_PORT = cfg["SMTP_PORT"]
+
 
 AUDIO_BASE_URL = "https://exbridge.ddns.net/aidexx/tts"
 
