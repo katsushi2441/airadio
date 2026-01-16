@@ -29,6 +29,60 @@ class TTS(BaseModel):
     text: str
     speaker: int = SPEAKER
 
+# =========================
+# ラジオ + BGM ミックス保存
+# =========================
+class MixRequest(BaseModel):
+    radio_url: str
+    bgm_url: str
+    bgm_volume: int = 30
+
+
+@app.post("/mix")
+def mix_audio(req: MixRequest):
+    radio_url = req.radio_url.strip()
+    bgm_url   = req.bgm_url.strip()
+
+    if not radio_url or not bgm_url:
+        raise HTTPException(status_code=400, detail="invalid parameters")
+
+    vol = max(0, min(100, req.bgm_volume))
+    vol_f = vol / 100
+
+    outdir = Path("../../mixed")
+    outdir.mkdir(exist_ok=True)
+
+    outname = f"mix_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp3"
+    outpath = outdir / outname
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", radio_url,
+        "-i", bgm_url,
+        "-filter_complex",
+        f"[1:a]volume={vol_f}[a1];[0:a][a1]amix=inputs=2",
+        str(outpath)
+    ]
+
+    p = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True
+    )
+
+    if p.returncode != 0:
+        raise HTTPException(
+            status_code=500,
+            detail=p.stderr.strip()
+        )
+
+    return {
+        "ok": True,
+        "file": outname,
+        "url": f"https://exbridge.ddns.net/aidexx/mixed/{outname}"
+    }
+
+
 @app.post("/tts")
 def tts(req: TTS):
     text = req.text.strip()
