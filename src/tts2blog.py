@@ -14,7 +14,7 @@ from email.header import Header
 # =====================================================
 # Blogger メール設定（y2blog.py と同一）
 # =====================================================
-CONFIG_FILE = __file__.replace("tts2blog.py", "blogger_config.json")
+CONFIG_FILE = __file__.replace("tts2blog.py", "config.json")
 
 with open(CONFIG_FILE, "r", encoding="utf-8") as f:
     cfg = json.load(f)

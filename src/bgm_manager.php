@@ -36,6 +36,8 @@ function handle_mix_request() {
     $bgm_file  = $data["bgm_file"];
     $bgm_vol   = isset($data["bgm_volume"]) ? (int)$data["bgm_volume"] : 30;
     $bgm_vol   = max(0, min(100, $bgm_vol));
+    $src = basename(parse_url($radio_url, PHP_URL_PATH));
+
 
     // ===== voicebox_api /mix に転送 =====
     $api_url = "http://exbridge.ddns.net:8002/mix";
@@ -45,7 +47,8 @@ function handle_mix_request() {
     $payload = json_encode(array(
         "radio_url"  => $radio_url,
         "bgm_url"    => $bgm_url,
-        "bgm_volume" => $bgm_vol
+        "bgm_volume" => $bgm_vol,
+        "source_file" => $src
     ));
 
     error_log("BGM_API payload: " . $payload);
@@ -308,7 +311,8 @@ function saveMix(bgmFile) {
             mode: "mix",
             radio_url: radioInput.value,
             bgm_file: bgmFile,
-            bgm_volume: volInput.value
+            bgm_volume: volInput.value,
+            source_file: radioInput.value.split("/").pop()
         })
     })
     .then(r => r.json())

@@ -36,6 +36,7 @@ class MixRequest(BaseModel):
     radio_url: str
     bgm_url: str
     bgm_volume: int = 30
+    source_file: str   # ★ 追加
 
 
 @app.post("/mix")
@@ -52,7 +53,9 @@ def mix_audio(req: MixRequest):
     outdir = Path("../../mixed")
     outdir.mkdir(exist_ok=True)
 
-    outname = f"mix_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp3"
+    src = Path(req.source_file).name
+    base = src.rsplit(".", 1)[0]
+    outname = base + ".mp3"
     outpath = outdir / outname
 
     cmd = [
@@ -64,17 +67,10 @@ def mix_audio(req: MixRequest):
         str(outpath)
     ]
 
-    p = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True
-    )
+    p = subprocess.run(cmd, capture_output=True, text=True)
 
     if p.returncode != 0:
-        raise HTTPException(
-            status_code=500,
-            detail=p.stderr.strip()
-        )
+        raise HTTPException(status_code=500, detail=p.stderr.strip())
 
     return {
         "ok": True,

@@ -9,5 +9,5 @@ venv/
 node_modules/
 src/query.json
 src/ftpphp.py
-
+src/config.json
 

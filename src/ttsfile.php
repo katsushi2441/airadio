@@ -68,6 +68,13 @@ if (
 
 define("TTS_API_BASE", "http://exbridge.ddns.net:8002");
 define("TTS_AUDIO_BASE", "https://exbridge.ddns.net/aidexx");
+define("MIXED_AUDIO_BASE", "https://exbridge.ddns.net/aidexx/mixed");
+
+function url_exists($url) {
+    $headers = @get_headers($url);
+    if (!is_array($headers)) return false;
+    return (strpos($headers[0], "200") !== false);
+}
 
 function http_get_json($url) {
     $ch = curl_init($url);
@@ -330,10 +337,31 @@ if (mb_strlen($script) > 50) {
 ?>
 </td>
 <td>
+<?php
+$ttsFile  = $f["file"];
+$base     = pathinfo($ttsFile, PATHINFO_FILENAME);
+$mixedMp3 = $base . ".mp3";
+
+$mixedUrl = MIXED_AUDIO_BASE . "/" . $mixedMp3;
+
+if (url_exists($mixedUrl)) {
+    $playUrl = $mixedUrl;
+    $label   = "🎵 BGM MIX";
+    $name    = $mixedMp3;
+} else {
+    $playUrl = TTS_AUDIO_BASE . "/tts/" . $ttsFile;
+    $label   = "tts";
+    $name    = $ttsFile;
+}
+?>
+<div class="muted">
+<?php echo htmlspecialchars($label . ": " . $name, ENT_QUOTES, "UTF-8"); ?>
+</div>
 <audio controls>
-<source src="<?php echo htmlspecialchars(TTS_AUDIO_BASE."/tts/".$f["file"], ENT_QUOTES, "UTF-8"); ?>">
+    <source src="<?php echo htmlspecialchars($playUrl, ENT_QUOTES, "UTF-8"); ?>">
 </audio>
 </td>
+
 <td>
 <form method="post" style="display:inline;">
 <button class="btn-blog"
