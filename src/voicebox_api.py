@@ -38,6 +38,69 @@ class MixRequest(BaseModel):
     bgm_volume: int = 30
     source_file: str   # ★ 追加
 
+# =========================
+# mp3 / wav + 画像 → mp4
+# =========================
+from fastapi import UploadFile, File, Form
+import shutil
+
+VIDEO_IMG_DIR = Path("../../video_img")
+VIDEO_OUT_DIR = Path("../../video_mp4")
+
+VIDEO_IMG_DIR.mkdir(exist_ok=True)
+VIDEO_OUT_DIR.mkdir(exist_ok=True)
+
+@app.post("/audio_to_mp4")
+def audio_to_mp4(
+    image: UploadFile = File(...),
+    audio_url: str = Form(...)
+):
+    if not audio_url:
+        raise HTTPException(status_code=400, detail="audio_url required")
+
+    # 画像保存
+    img_ext = Path(image.filename).suffix.lower()
+    if img_ext not in [".png", ".jpg", ".jpeg", ".webp"]:
+        raise HTTPException(status_code=400, detail="invalid image type")
+
+    img_name = uuid.uuid4().hex + img_ext
+    img_path = VIDEO_IMG_DIR / img_name
+
+    with img_path.open("wb") as f:
+        shutil.copyfileobj(image.file, f)
+
+    # 出力 mp4 名（wav2mp4.py と同じ思想）
+    base = Path(audio_url).stem
+    out_mp4 = VIDEO_OUT_DIR / f"{base}.mp4"
+
+    cmd = [
+        "ffmpeg",
+        "-fflags", "+genpts",
+        "-y",
+        "-loop", "1",
+        "-i", str(img_path),
+        "-i", audio_url,
+        "-c:v", "libx264",
+        "-tune", "stillimage",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-shortest",
+        str(out_mp4)
+    ]
+
+    p = subprocess.run(cmd, capture_output=True, text=True)
+
+    if p.returncode != 0:
+        raise HTTPException(status_code=500, detail=p.stderr)
+
+    return {
+        "ok": True,
+        "file": out_mp4.name,
+        "mp4_url": f"https://exbridge.ddns.net/aidexx/video_mp4/{out_mp4.name}"
+    }
+
+
 
 @app.post("/mix")
 def mix_audio(req: MixRequest):
