@@ -104,9 +104,11 @@ from scripts.
 │   ├── rss.php             # Podcast-compatible RSS feed generation
 │   ├── bgm_manager.php     # Background music upload, management, and mixing control
 │   ├── voicebox_ui.php     # Web UI for manual TTS testing and control
-│   └── voicebox_api.py     # Python API server wrapping VOICEVOX engine
+│   ├── voicebox_api.py     # Python API server wrapping VOICEVOX engine
+│   └── audio2mp4.php       # Web UI for image + audio → MP4 video generation
 ├── bgm/                    # User-managed background music files
-├── mixed/                  # Auto-generated mixed audio output
+├── mixed/                  # Auto-generated mixed audio output (mp3 / wav)
+├── video_mp4/              # Auto-generated MP4 video output (image + radio audio)
 ├── README.md
 ├── LICENSE
 └── .gitignore
@@ -181,3 +183,83 @@ The project is designed with a modular architecture, making it easy
 to extend or customize individual components such as script generation,
 text-to-speech, background music processing, or publishing workflows
 for different use cases.
+
+
+
+---
+
+## 🎬 Audio → MP4 Video Generation (Image + Radio)
+
+AI Radio Generator includes an optional feature to convert
+generated radio audio (mp3 / wav) into **MP4 video files**
+by combining the audio with a single static image.
+
+This feature is designed for:
+- YouTube uploads
+- YouTube Shorts
+- Spotify Video Podcast
+- Other video-based distribution platforms
+
+---
+
+## Video Generation Architecture
+
+The video generation pipeline is intentionally separated
+from the main PHP application.
+
+- **PHP Server**
+  - Provides a Web UI for:
+    - Image upload
+    - Audio file URL input
+  - Does **not** execute ffmpeg
+
+- **Python API Server (FastAPI)**
+  - Executes ffmpeg
+  - Generates MP4 files from audio + image
+  - Returns a public URL for the generated video
+
+This separation keeps the PHP server lightweight and secure,
+while allowing full control over media processing on the
+Python side.
+
+---
+
+## Web Usage (MP4 Generation)
+
+1. Open `audio2mp4.php`
+2. Upload an image file (PNG / JPG)
+3. Enter a generated audio file URL (mp3 / wav)
+   - Example:
+     ```
+     https://exbridge.ddns.net/aidexx/mixed/xxxxxxxx.mp3
+     ```
+4. Click **Generate MP4**
+5. The generated video is immediately playable and downloadable
+
+---
+
+## API: Audio to MP4
+
+### POST `/audio_to_mp4`
+
+**Request (multipart/form-data)**
+
+- `image`  
+  Static image file (PNG / JPG)
+
+- `audio_url`  
+  URL of the audio file (mp3 / wav)
+
+**Response Example**
+
+```json
+{
+  "ok": true,
+  "file": "xxxxxxxx.mp4",
+  "mp4_url": "https://exbridge.ddns.net/aidexx/video_mp4/xxxxxxxx.mp4"
+}
+
+
+
+
+
