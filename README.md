@@ -1,51 +1,59 @@
 # AI Radio Generator
 
-AI Radio Generator is an automated AI project that generates
-radio-style audio episodes and podcast-compatible RSS feeds
-from news articles or keywords.
+AI Radio Generator is an automated AI media pipeline that generates  
+radio-style audio episodes, background-mixed narration, MP4 videos, and  
+podcast-compatible RSS feeds from news articles or keywords.
 
-Users receive ready-to-publish audio files and RSS feeds
-without manual recording, editing, or voice work.
+Users can publish AI-generated radio and podcast content without any manual
+recording, editing, or voice work.
 
 ---
 
 ## What this project does
 
-AI Radio Generator provides a complete, automated workflow:
+AI Radio Generator provides a fully automated workflow:
 
 - Ingests news articles or keyword-based content
-- Generates radio-style scripts using large language models (LLMs)
-- Converts scripts into natural-sounding speech via text-to-speech
-- Outputs audio files and updates podcast-compatible RSS feeds
+- Generates radio-style scripts using Large Language Models (LLMs)
+- Converts scripts into natural-sounding speech via Text-to-Speech (TTS)
+- Optionally mixes background music (BGM)
+- Generates podcast-ready RSS feeds
+- Optionally converts audio into MP4 video (image + radio)
 
-All steps are executed automatically.
+All steps are automated and self-hosted.
 
 ---
 
 ## Outputs (What users get)
 
 - 🎧 Radio-style audio episodes (WAV / MP3)
-- 📡 Podcast-compatible RSS feeds ready for distribution
-- ⚙️ Fully automated pipeline with no manual recording or editing
+- 🎵 BGM-mixed narration audio
+- 🎬 MP4 video files (image + radio audio)
+- 📡 Podcast-compatible RSS feeds
+- ⚙️ Fully automated publishing pipeline
 
-These outputs can be directly published to podcast platforms
-or used as AI-generated audio content.
+These outputs can be directly published to podcast platforms, YouTube,
+YouTube Shorts, Spotify Video Podcast, and other media services.
 
 ---
 
 ## Who this project is for
 
-- Content creators experimenting with automated audio generation
-- Educators exploring spoken summaries and AI narration
-- Developers interested in AI-powered media pipelines
-- Independent media projects and research prototypes
+- Content creators experimenting with automated audio media
+- Independent media and podcast projects
+- Developers building AI-powered content pipelines
+- Educators and researchers exploring spoken summaries
+- Self-hosted AI automation enthusiasts
 
 ---
 
 ## Example outputs
 
-- ▶ Sample audio: https://exbridge.ddns.net/aidexx/tts/2243b1178ef34e2698a5037bd26ba1d9.wav
-- ▶ Sample RSS feed: https://exbridge.jp/aidexx/rss.xml
+- Sample audio  
+  https://exbridge.ddns.net/aidexx/tts/2243b1178ef34e2698a5037bd26ba1d9.wav
+
+- Sample RSS feed  
+  https://exbridge.jp/aidexx/rss.xml
 
 ---
 
@@ -54,18 +62,21 @@ or used as AI-generated audio content.
 1. Ingests news articles via RSS feeds or keyword-based search
 2. Generates radio-style scripts using an LLM
 3. Converts scripts into speech using a TTS engine
-4. Processes audio/text for publishing
+4. Post-processes audio (BGM mixing, formatting)
 5. Outputs audio files and updates podcast-compatible RSS feeds
+6. Optionally converts audio into MP4 video
 
 ---
 
 ## Key features
 
 - Fully automated end-to-end AI pipeline
-- News-to-audio conversion
-- Modular architecture (script generation, TTS, publishing)
+- News-to-audio and keyword-to-audio conversion
+- Optional background music mixing
+- Optional audio to MP4 video generation
+- Modular architecture
 - Self-hosted and customizable
-- Open-source and extensible
+- Open-source (MIT License)
 
 ---
 
@@ -73,45 +84,45 @@ or used as AI-generated audio content.
 
 - Large Language Models (LLMs)
 - Text-to-Speech (TTS)
+- Background music mixing (ffmpeg)
 - Podcast-compatible RSS generation
-- Python and PHP-based automation scripts
+- Python and PHP automation
+- FastAPI for media processing APIs
 
 ---
 
 ## Voicebox (Text-to-Speech Control)
 
 This project includes an optional Voicebox layer for controlling
-the Text-to-Speech (TTS) engine via both UI and API.
+the Text-to-Speech engine via both UI and API.
 
-- A lightweight web-based UI for manual testing and tuning
-- A Python-based API server that wraps the VOICEVOX engine
-- Designed to be reusable by AI Radio and other automation scripts
+- Web-based UI for manual voice testing and tuning
+- Python-based API server wrapping the VOICEVOX engine
+- Reusable across AI Radio and other automation projects
 
-This separation allows flexible use:
-manual testing via browser, or fully automated audio generation
-from scripts.
+This separation allows both manual testing via browser
+and fully automated TTS generation via scripts.
 
 ---
 
 ## Repository structure
 
-.
-├── src/
-│   ├── airadio.php         # Core PHP orchestration logic
-│   ├── airadio.py          # Python-based AI script generation
-│   ├── ttsfile.php         # TTS integration and audio file handling
-│   ├── tts2blog.py         # Audio/text post-processing and publishing utilities
-│   ├── rss.php             # Podcast-compatible RSS feed generation
-│   ├── bgm_manager.php     # Background music upload, management, and mixing control
-│   ├── voicebox_ui.php     # Web UI for manual TTS testing and control
-│   ├── voicebox_api.py     # Python API server wrapping VOICEVOX engine
-│   └── audio2mp4.php       # Web UI for image + audio → MP4 video generation
-├── bgm/                    # User-managed background music files
-├── mixed/                  # Auto-generated mixed audio output (mp3 / wav)
-├── video_mp4/              # Auto-generated MP4 video output (image + radio audio)
-├── README.md
-├── LICENSE
-└── .gitignore
+- src/
+  - airadio.php        : Core PHP orchestration logic
+  - airadio.py         : Python-based AI script generation
+  - ttsfile.php        : TTS integration and audio file handling
+  - tts2blog.py        : Audio/text post-processing and publishing utilities
+  - rss.php            : Podcast-compatible RSS feed generation
+  - bgm_manager.php    : Background music upload, management, and mixing control
+  - voicebox_ui.php    : Web UI for manual TTS testing and control
+  - voicebox_api.py    : Python API server wrapping the VOICEVOX engine
+  - audio2mp4.php      : Web UI for image + audio to MP4 generation
+- bgm/        : User-managed background music files
+- mixed/      : Auto-generated mixed audio output
+- video_mp4/  : Auto-generated MP4 video output
+- README.md
+- LICENSE
+- .gitignore
 
 ---
 
@@ -120,8 +131,8 @@ from scripts.
 AI Radio Generator supports optional background music (BGM)
 as part of its audio post-processing pipeline.
 
-BGM allows generated radio narration to be mixed with
-background music before publishing.
+Generated radio narration can be mixed with background music
+before publishing.
 
 ---
 
@@ -129,34 +140,27 @@ background music before publishing.
 
 Background music handling is implemented as a first-class feature.
 
-Related components:
+- bgm_manager.php  
+  Uploads, manages, and configures background music files.
 
-- src/bgm_manager.php  
-  Manages background music files, including upload,
-  selection, and configuration for mixing.
+- ttsfile.php  
+  Manages generated TTS audio files.
 
-- src/ttsfile.php  
-  Manages generated TTS audio files and prepares them
-  for further audio processing.
-
-- src/tts2blog.py  
-  Performs post-processing of generated audio.
-  When BGM is enabled, this program mixes the main
-  radio narration audio with background music using ffmpeg.
+- tts2blog.py  
+  Performs post-processing and mixes narration audio with BGM using ffmpeg.
 
 ---
 
 ## BGM Files
 
-Directory:
-bgm/
+Directory: bgm/
 
-Description:
-- Stores background music audio files provided by the user
-- Files are manually uploaded or managed via bgm_manager.php
-- These files are not auto-generated by the system
+- Stores user-provided background music files
+- Managed via bgm_manager.php
+- Not auto-generated
 
 Supported formats:
+
 - mp3
 - wav
 - m4a
@@ -165,101 +169,74 @@ Supported formats:
 
 ## Mixed Audio Output
 
-Directory:
-mixed/
+Directory: mixed/
 
-Description:
 - Stores final mixed audio files
-- Output includes radio narration combined with BGM
-- Files are generated automatically during post-processing
-- Resulting audio is suitable for playback, download,
-  or publishing to podcast platforms
+- Includes narration and BGM
+- Automatically generated
+- Ready for playback or publishing
 
 ---
 
-## Extensibility
-
-The project is designed with a modular architecture, making it easy
-to extend or customize individual components such as script generation,
-text-to-speech, background music processing, or publishing workflows
-for different use cases.
-
-
-
----
-
-## 🎬 Audio → MP4 Video Generation (Image + Radio)
+## Audio to MP4 Video Generation
 
 AI Radio Generator includes an optional feature to convert
-generated radio audio (mp3 / wav) into **MP4 video files**
-by combining the audio with a single static image.
-
-This feature is designed for:
-- YouTube uploads
-- YouTube Shorts
-- Spotify Video Podcast
-- Other video-based distribution platforms
+generated radio audio into MP4 video files by combining
+the audio with a single static image.
 
 ---
 
 ## Video Generation Architecture
 
-The video generation pipeline is intentionally separated
-from the main PHP application.
+- PHP server  
+  Provides Web UI for image upload and audio URL input.  
+  Does not execute ffmpeg.
 
-- **PHP Server**
-  - Provides a Web UI for:
-    - Image upload
-    - Audio file URL input
-  - Does **not** execute ffmpeg
-
-- **Python API Server (FastAPI)**
-  - Executes ffmpeg
-  - Generates MP4 files from audio + image
-  - Returns a public URL for the generated video
-
-This separation keeps the PHP server lightweight and secure,
-while allowing full control over media processing on the
-Python side.
+- Python API server (FastAPI)  
+  Executes ffmpeg, generates MP4 files,
+  and returns public URLs for generated videos.
 
 ---
 
 ## Web Usage (MP4 Generation)
 
-1. Open `audio2mp4.php`
+1. Open audio2mp4.php
 2. Upload an image file (PNG / JPG)
 3. Enter a generated audio file URL (mp3 / wav)
-   - Example:
-     ```
-     https://exbridge.ddns.net/aidexx/mixed/xxxxxxxx.mp3
-     ```
-4. Click **Generate MP4**
+4. Click Generate MP4
 5. The generated video is immediately playable and downloadable
 
 ---
 
 ## API: Audio to MP4
 
-### POST `/audio_to_mp4`
+Endpoint: POST /audio_to_mp4
 
-**Request (multipart/form-data)**
+Request parameters:
 
-- `image`  
-  Static image file (PNG / JPG)
+- image : static image file (PNG / JPG)
+- audio_url : URL of the audio file (mp3 / wav)
 
-- `audio_url`  
-  URL of the audio file (mp3 / wav)
+Response example:
 
-**Response Example**
+- ok: true
+- file: xxxxxxxx.mp4
+- mp4_url: https://exbridge.ddns.net/aidexx/video_mp4/xxxxxxxx.mp4
 
-```json
-{
-  "ok": true,
-  "file": "xxxxxxxx.mp4",
-  "mp4_url": "https://exbridge.ddns.net/aidexx/video_mp4/xxxxxxxx.mp4"
-}
+---
 
+## Extensibility
 
+The project is designed with a modular architecture, making it easy to:
 
+- Swap LLMs
+- Change TTS engines
+- Customize BGM logic
+- Add new publishing targets
+- Integrate new automation workflows
 
+---
 
+## License
+
+MIT License
