@@ -36,18 +36,21 @@ function handle_mix_request() {
     $bgm_file  = $data["bgm_file"];
     $bgm_vol   = isset($data["bgm_volume"]) ? (int)$data["bgm_volume"] : 30;
     $bgm_vol   = max(0, min(100, $bgm_vol));
+    $bgm_start = isset($data["bgm_start"]) ? (float)$data["bgm_start"] : 0;
+
     $src = basename(parse_url($radio_url, PHP_URL_PATH));
 
 
     // ===== voicebox_api /mix に転送 =====
     $api_url = "http://exbridge.ddns.net:8002/mix";
 
-    $bgm_url = "https://exbridge.jp/aidexx/bgm/" . rawurlencode($bgm_file);
+    $bgm_url = "https://exbridge.jp/aidexx/bgm/" . $bgm_file;
 
     $payload = json_encode(array(
         "radio_url"  => $radio_url,
         "bgm_url"    => $bgm_url,
         "bgm_volume" => $bgm_vol,
+        "bgm_start"  => $bgm_start,
         "source_file" => $src
     ));
 
@@ -96,7 +99,7 @@ if (isset($_GET["delete"])) {
    アップロード処理
 ------------------------- */
 if (isset($_FILES["bgm"])) {
-    $name = basename($_FILES["bgm"]["name"]);
+    $name = $_FILES["bgm"]["name"];
     $tmp  = $_FILES["bgm"]["tmp_name"];
     if ($tmp != "") {
         move_uploaded_file($tmp, $bgm_dir . "/" . $name);
@@ -222,6 +225,10 @@ table audio {
 <input type="range" id="bgm_volume" min="0" max="100">
 <div class="note">※ 音量は保存・ミックスにも反映されます</div>
 </div>
+<label>BGM開始秒</label>
+<input type="number" id="bgm_start" min="0" value="0">
+<div class="note">※ BGMを何秒後から再生するか（保存・同時再生に反映）</div>
+
 
 <div class="card">
 <h2>BGM一覧</h2>
@@ -234,7 +241,7 @@ table audio {
 </tr>
 <?php foreach ($files as $f): ?>
 <tr>
-    <td><?php echo htmlspecialchars($f); ?></td>
+    <td><?php echo htmlspecialchars($f, ENT_QUOTES, 'UTF-8'); ?></td>
     <td>
         <audio controls>
             <source src="bgm/<?php echo rawurlencode($f); ?>">
@@ -289,14 +296,28 @@ volInput.addEventListener("input", function () {
     localStorage.setItem(VOL_KEY, this.value);
     bgm.volume = this.value / 100;
 });
-
+var startInput = document.getElementById("bgm_start");
 function playBoth(bgmFile) {
     if (!radioInput.value) return alert("ラジオ音源URLを入力してください");
+
+    var start = parseFloat(startInput.value) || 0;
+
+    radio.pause();
+    bgm.pause();
+
+    radio.currentTime = 0;
+    bgm.currentTime   = 0;
+
     radio.src = radioInput.value;
     bgm.src   = "bgm/" + bgmFile;
+
     radio.play();
-    bgm.play();
+
+    setTimeout(function () {
+        bgm.play();
+    }, start * 1000);
 }
+
 function stopBoth() {
     radio.pause(); bgm.pause();
     radio.currentTime = 0;
@@ -312,6 +333,7 @@ function saveMix(bgmFile) {
             radio_url: radioInput.value,
             bgm_file: bgmFile,
             bgm_volume: volInput.value,
+            bgm_start: startInput.value,
             source_file: radioInput.value.split("/").pop()
         })
     })

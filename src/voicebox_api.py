@@ -2,6 +2,9 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import requests, uuid, subprocess
 import requests.exceptions
+import tempfile
+import json
+
 from pathlib import Path
 from datetime import datetime
 
@@ -36,6 +39,7 @@ class MixRequest(BaseModel):
     radio_url: str
     bgm_url: str
     bgm_volume: int = 30
+    bgm_start: float = 0.0
     source_file: str   # ★ 追加
 
 # =========================
@@ -53,7 +57,8 @@ VIDEO_OUT_DIR.mkdir(exist_ok=True)
 @app.post("/audio_to_mp4")
 def audio_to_mp4(
     image: UploadFile = File(...),
-    audio_url: str = Form(...)
+    audio_url: str = Form(...),
+    script_text: str = Form("")
 ):
     if not audio_url:
         raise HTTPException(status_code=400, detail="audio_url required")
@@ -69,9 +74,50 @@ def audio_to_mp4(
     with img_path.open("wb") as f:
         shutil.copyfileobj(image.file, f)
 
-    # 出力 mp4 名（wav2mp4.py と同じ思想）
+    # 台本テキストを一時ファイルへ
+    script_file = None
+    if script_text.strip():
+        tf = tempfile.NamedTemporaryFile(delete=False, suffix=".txt", mode="w", encoding="utf-8")
+        tf.write(script_text)
+        tf.close()
+        script_file = tf.name
+
+    # 出力 mp4 名
     base = Path(audio_url).stem
     out_mp4 = VIDEO_OUT_DIR / f"{base}.mp4"
+
+    # 音声の長さ（秒）取得
+    probe = subprocess.run(
+        [
+            "ffprobe",
+            "-v", "error",
+            "-select_streams", "a:0",
+            "-show_entries", "format=duration",
+            "-of", "json",
+            audio_url
+        ],
+        capture_output=True,
+        text=True
+    )
+
+    try:
+        duration = float(json.loads(probe.stdout)["format"]["duration"])
+    except Exception:
+        duration = 1.0
+
+    # drawtext（エンドロール）
+    drawtext = ""
+    if script_file:
+        drawtext = (
+            "drawtext="
+            "fontfile=/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc:"
+            f"textfile={script_file}:"
+            "fontsize=36:"
+            "fontcolor=white:"
+            "line_spacing=10:"
+            "x=(w-text_w)/2+72:"
+            f"y=h-230-(t/{duration})*(h+text_h)"
+        )
 
     cmd = [
         "ffmpeg",
@@ -80,6 +126,12 @@ def audio_to_mp4(
         "-loop", "1",
         "-i", str(img_path),
         "-i", audio_url,
+    ]
+
+    if drawtext:
+        cmd += ["-vf", drawtext]
+
+    cmd += [
         "-c:v", "libx264",
         "-tune", "stillimage",
         "-pix_fmt", "yuv420p",
@@ -112,6 +164,7 @@ def mix_audio(req: MixRequest):
 
     vol = max(0, min(100, req.bgm_volume))
     vol_f = vol / 100
+    bgm_start = max(0.0, req.bgm_start)
 
     outdir = Path("../../mixed")
     outdir.mkdir(exist_ok=True)
@@ -120,13 +173,14 @@ def mix_audio(req: MixRequest):
     base = src.rsplit(".", 1)[0]
     outname = base + ".mp3"
     outpath = outdir / outname
+    delay_ms = int(bgm_start * 1000)
 
     cmd = [
         "ffmpeg", "-y",
         "-i", radio_url,
         "-i", bgm_url,
         "-filter_complex",
-        f"[1:a]volume={vol_f}[a1];[0:a][a1]amix=inputs=2",
+        f"[1:a]volume={vol_f},adelay={delay_ms}|{delay_ms}[a1];[0:a][a1]amix=inputs=2",
         str(outpath)
     ]
 
