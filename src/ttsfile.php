@@ -181,68 +181,142 @@ if (!is_array($files)) {
 <title>TTSファイル管理</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
+/* ===============================
+   Web3 Navy / Metallic UI
+   ttsfile.php
+   構造・機能変更なし
+=============================== */
+
 body {
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    background:#f6f7f9;
-    padding:16px;
+    background:
+        radial-gradient(1200px 600px at 10% -10%, #1e3a8a33, transparent 40%),
+        radial-gradient(800px 400px at 90% 10%, #0ea5e933, transparent 35%),
+        linear-gradient(180deg, #020617 0%, #020617 100%);
+    color: #e5e7eb;
+    padding: 16px;
 }
+
 .wrap {
     max-width: 980px;
     margin: 0 auto;
 }
+
+/* ガラス＋メタリックカード */
 .card {
-    background:#fff;
-    border:1px solid #e5e7eb;
-    border-radius:14px;
-    padding:14px;
+    background:
+        linear-gradient(
+            135deg,
+            rgba(30, 58, 138, 0.35),
+            rgba(15, 23, 42, 0.65)
+        );
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 16px;
+    padding: 16px;
+    backdrop-filter: blur(10px);
+    box-shadow:
+        0 10px 30px rgba(2, 6, 23, 0.6),
+        inset 0 1px 0 rgba(255,255,255,0.04);
 }
+
 h1 {
-    font-size:18px;
-    margin:0 0 12px;
+    font-size: 18px;
+    margin: 0 0 14px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    color: #f8fafc;
 }
-table {
-    width:100%;
-    border-collapse:collapse;
-}
-th, td {
-    padding:8px;
-    border-bottom:1px solid #e5e7eb;
-    font-size:14px;
-    vertical-align:middle;
-}
-th {
-    text-align:left;
-    background:#f9fafb;
-}
-audio {
-    width:220px;
-}
-.btn-blog {
-    background:#2563eb;
-    color:#fff;
-    border:0;
-    padding:6px 10px;
-    border-radius:8px;
-    cursor:pointer;
-}
-.btn-del {
-    background:#b91c1c;
-    color:#fff;
-    border:0;
-    padding:6px 10px;
-    border-radius:8px;
-    cursor:pointer;
-}
-.muted {
-    color:#6b7280;
-    font-size:12px;
-}
+
+/* メッセージ */
 .msg {
-    margin-bottom:10px;
-    font-weight:600;
+    margin-bottom: 12px;
+    font-weight: 600;
+    color: #38bdf8;
 }
+
+/* テーブル */
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th, td {
+    padding: 10px;
+    font-size: 14px;
+    vertical-align: middle;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+th {
+    text-align: left;
+    background: rgba(2, 6, 23, 0.6);
+    color: #c7d2fe;
+    font-weight: 600;
+}
+
+tr:hover td {
+    background: rgba(30, 58, 138, 0.12);
+}
+
+/* テキスト */
+.muted {
+    color: #94a3b8;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+/* リンク */
+a {
+    color: #38bdf8;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* audio */
+audio {
+    width: 220px;
+    background: rgba(2, 6, 23, 0.6);
+    border-radius: 10px;
+}
+
+/* ボタン */
+.btn-blog {
+    background:
+        linear-gradient(135deg, #2563eb, #0ea5e9);
+    color: #ffffff;
+    border: 0;
+    padding: 7px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 600;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.45);
+}
+
+.btn-blog:hover {
+    filter: brightness(1.08);
+}
+
+.btn-del {
+    background:
+        linear-gradient(135deg, #7f1d1d, #b91c1c);
+    color: #ffffff;
+    border: 0;
+    padding: 7px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 600;
+    box-shadow: 0 4px 14px rgba(185, 28, 28, 0.45);
+}
+
+.btn-del:hover {
+    filter: brightness(1.08);
+}
+
 /* ================================
-   スマホ対応（CSSのみ）
+   スマホ対応（既存仕様保持）
 ================================ */
 @media screen and (max-width: 768px) {
 
@@ -261,11 +335,16 @@ audio {
     }
 
     tr {
-        margin-bottom: 16px;
-        padding: 12px;
-        border: 1px solid #e5e7eb;
-        border-radius: 12px;
-        background: #fff;
+        margin-bottom: 18px;
+        padding: 14px;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        border-radius: 14px;
+        background:
+            linear-gradient(
+                135deg,
+                rgba(30, 58, 138, 0.3),
+                rgba(15, 23, 42, 0.7)
+            );
     }
 
     td {
@@ -283,19 +362,18 @@ audio {
 
     .muted {
         font-size: 13px;
-        line-height: 1.6;
-        max-height: 4.8em;   /* 約3行 */
+        max-height: 4.8em;
         overflow: hidden;
     }
 
     .btn-blog,
     .btn-del {
         width: 100%;
-        margin-top: 6px;
+        margin-top: 8px;
     }
 }
-
 </style>
+
 </head>
 <body>
 <div class="wrap">
@@ -389,5 +467,6 @@ Blogger投稿
 </div>
 </body>
 </html>
+
 
 

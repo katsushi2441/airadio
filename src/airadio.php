@@ -381,32 +381,161 @@ if (isset($_POST["tts"])) {
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>ニュースラジオ（5分）生成</title>
+<title>ニュースラジオ生成</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-    body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background:#f6f7f9; padding:16px; }
-    .wrap { max-width: 980px; margin: 0 auto; }
-    .card { background:#fff; border:1px solid #e5e7eb; border-radius:14px; padding:14px; margin-bottom:12px; }
-    h1 { font-size:18px; margin:0 0 10px; }
-    .btn { display:inline-block; border:0; background:#111827; color:#fff; padding:10px 14px; border-radius:10px; cursor:pointer; }
-    .btn2 { display:inline-block; border:1px solid #111827; background:#fff; color:#111827; padding:10px 14px; border-radius:10px; cursor:pointer; }
-    textarea { width:100%; min-height: 260px; padding:10px; border-radius:10px; border:1px solid #d1d5db; font-size:14px; line-height:1.6; }
-    .err { color:#b91c1c; font-weight:600; }
-    .muted { color:#6b7280; font-size:13px; }
-    ul { margin: 8px 0 0 18px; }
-    li { margin-bottom:6px; }
-    a { color:#2563eb; text-decoration:none; }
-    a:hover { text-decoration:underline; }
-    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+/* ===============================
+   Web3 Navy / Metallic UI
+   構造・機能変更なし
+=============================== */
+
+body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background:
+        radial-gradient(1200px 600px at 10% -10%, #1e3a8a33, transparent 40%),
+        radial-gradient(800px 400px at 90% 10%, #0ea5e933, transparent 35%),
+        linear-gradient(180deg, #020617 0%, #020617 100%);
+    color: #e5e7eb;
+    padding: 16px;
+}
+
+.wrap {
+    max-width: 980px;
+    margin: 0 auto;
+}
+
+/* ガラス＋メタリック */
+.card {
+    background:
+        linear-gradient(
+            135deg,
+            rgba(30, 58, 138, 0.35),
+            rgba(15, 23, 42, 0.65)
+        );
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 14px;
+    backdrop-filter: blur(10px);
+    box-shadow:
+        0 10px 30px rgba(2, 6, 23, 0.6),
+        inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+h1 {
+    font-size: 18px;
+    margin: 0 0 10px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    color: #f8fafc;
+}
+
+/* ボタン（Web3っぽい発光） */
+.btn {
+    border: 0;
+    background:
+        linear-gradient(135deg, #2563eb, #0ea5e9);
+    color: #ffffff;
+    padding: 10px 16px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-weight: 600;
+    box-shadow:
+        0 6px 18px rgba(37, 99, 235, 0.45);
+}
+
+.btn:hover {
+    filter: brightness(1.08);
+}
+
+.btn2 {
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    background: rgba(2, 6, 23, 0.6);
+    color: #e5e7eb;
+    padding: 10px 16px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.btn2:hover {
+    background: rgba(15, 23, 42, 0.8);
+}
+
+/* 入力系 */
+input[type="text"],
+textarea {
+    width: 100%;
+    background: rgba(2, 6, 23, 0.7);
+    color: #e5e7eb;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    padding: 10px;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+textarea {
+    min-height: 260px;
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: #94a3b8;
+}
+
+/* テキスト */
+.muted {
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+.err {
+    color: #f87171;
+    font-weight: 600;
+}
+
+/* リスト */
+ul {
+    margin: 8px 0 0 18px;
+}
+
+li {
+    margin-bottom: 8px;
+}
+
+/* リンク */
+a {
+    color: #38bdf8;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* レイアウト */
+.row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+/* audio */
+audio {
+    background: rgba(2, 6, 23, 0.6);
+    border-radius: 10px;
+}
 </style>
-</head>
+
 <body>
 <div class="wrap">
 
     <div class="card">
-        <h1>ニュースラジオ（約5分）生成</h1>
+        <h1>ニュースラジオ生成</h1>
         <div class="muted">
-            ①ニュース取得 → ②Ollamaで台本生成 → ③TTSで音声生成
+        1. ニュース取得 -> 2. AIで台本生成 -> 3. TTSで音声生成
         </div>
         <?php if ($err !== ""): ?>
             <div class="err" style="margin-top:10px;"><?php echo htmlspecialchars($err, ENT_QUOTES, "UTF-8"); ?></div>
@@ -415,7 +544,7 @@ if (isset($_POST["tts"])) {
             <input type="text" name="keyword"
                    value="<?php echo isset($_POST['keyword']) ? htmlspecialchars($_POST['keyword'], ENT_QUOTES, 'UTF-8') : ''; ?>"
                    placeholder="検索キーワード">
-            <button class="btn" type="submit" name="generate" value="1">ニュースから5分台本を生成</button>
+            <button class="btn" type="submit" name="generate" value="1">ニュースから台本を生成</button>
         </form>
     </div>
 

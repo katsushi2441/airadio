@@ -60,40 +60,54 @@ if (
 <title>VOICEBOX 話者・音声調整</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
+/* =========================
+   Web3 Dark Theme
+========================= */
 body {
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    background:#f6f7f9;
+    background: radial-gradient(1200px 600px at 50% -20%, #1e293b, #020617);
+    color:#e5e7eb;
     padding:16px;
 }
 .wrap {
-    max-width: 720px;
-    margin: 0 auto;
+    max-width:720px;
+    margin:0 auto;
 }
 .card {
-    background:#fff;
-    border:1px solid #e5e7eb;
-    border-radius:16px;
-    padding:16px;
+    background: rgba(15, 23, 42, 0.92);
+    border:1px solid rgba(148,163,184,0.15);
+    border-radius:18px;
+    padding:18px;
+    box-shadow:0 10px 30px rgba(0,0,0,0.45);
 }
 h1 {
     font-size:18px;
     margin:0 0 12px;
+    color:#f8fafc;
 }
 label {
     display:block;
-    font-size:13px;
-    margin-top:12px;
+    font-size:12px;
+    margin-top:14px;
     margin-bottom:4px;
+    color:#cbd5f5;
 }
 select,
 textarea,
 input[type=range] {
     width:100%;
 }
+select,
 textarea {
-    min-height:80px;
+    background:#020617;
+    color:#e5e7eb;
+    border:1px solid rgba(148,163,184,0.25);
+    border-radius:10px;
     padding:8px;
     font-size:14px;
+}
+textarea {
+    min-height:80px;
 }
 .range-row {
     display:flex;
@@ -104,27 +118,33 @@ textarea {
     width:40px;
     text-align:right;
     font-size:12px;
-    color:#555;
+    color:#94a3b8;
 }
 button {
     width:100%;
-    margin-top:16px;
-    padding:10px;
+    margin-top:18px;
+    padding:12px;
     border:0;
-    border-radius:10px;
-    background:#2563eb;
-    color:#fff;
+    border-radius:12px;
+    background:linear-gradient(135deg,#6366f1,#22d3ee);
+    color:#020617;
     font-size:15px;
+    font-weight:600;
     cursor:pointer;
+}
+button:hover {
+    opacity:0.9;
 }
 audio {
     width:100%;
-    margin-top:12px;
+    margin-top:14px;
+    background:#000;
+    border-radius:12px;
 }
 .note {
     font-size:12px;
-    color:#6b7280;
-    margin-top:8px;
+    color:#94a3b8;
+    margin-top:10px;
 }
 </style>
 </head>
@@ -209,7 +229,6 @@ audio {
 </div>
 
 <script>
-// ---------- スライダー数値表示 ----------
 document.querySelectorAll(".range-row").forEach(function(row) {
     const range = row.querySelector("input[type=range]");
     const span  = row.querySelector("span");
@@ -219,7 +238,6 @@ document.querySelectorAll(".range-row").forEach(function(row) {
     });
 });
 
-// ---------- 初期ロード：設定読込 ----------
 (async function loadProfile() {
     const res = await fetch("voicebox_ui.php", {
         method: "POST",
@@ -241,7 +259,6 @@ document.querySelectorAll(".range-row").forEach(function(row) {
     });
 })();
 
-// ---------- 再生 + 設定保存 ----------
 document.getElementById("play").addEventListener("click", async function () {
 
     const profile = {
@@ -252,7 +269,6 @@ document.getElementById("play").addEventListener("click", async function () {
         volume: Number(volume.value)
     };
 
-    // 設定保存
     await fetch("voicebox_ui.php", {
         method: "POST",
         headers: {"Content-Type":"application/json"},
@@ -262,7 +278,6 @@ document.getElementById("play").addEventListener("click", async function () {
         })
     });
 
-    // サンプル音声生成
     const res = await fetch("voicebox_ui.php", {
         method: "POST",
         headers: {"Content-Type":"application/json"},

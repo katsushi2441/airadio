@@ -168,45 +168,142 @@ if (
 <title>音声＋台本 → MP4</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
+/* ===============================
+   Web3 Navy / Metallic UI
+   audio2mp4.php
+   構造・機能変更なし
+=============================== */
+
 body {
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    background:#f6f7f9;
-    padding:16px;
+    background:
+        radial-gradient(1200px 600px at 10% -10%, #1e3a8a33, transparent 40%),
+        radial-gradient(800px 400px at 90% 10%, #0ea5e933, transparent 35%),
+        linear-gradient(180deg, #020617 0%, #020617 100%);
+    color: #e5e7eb;
+    padding: 16px;
 }
-.wrap { max-width:720px; margin:0 auto; }
+
+.wrap {
+    max-width: 720px;
+    margin: 0 auto;
+}
+
+/* ガラス＋メタリックカード */
 .card {
-    background:#fff;
-    border:1px solid #e5e7eb;
-    border-radius:16px;
-    padding:16px;
-    margin-bottom:16px;
+    background:
+        linear-gradient(
+            135deg,
+            rgba(30, 58, 138, 0.35),
+            rgba(15, 23, 42, 0.65)
+        );
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 18px;
+    padding: 16px;
+    margin-bottom: 18px;
+    backdrop-filter: blur(10px);
+    box-shadow:
+        0 10px 30px rgba(2, 6, 23, 0.6),
+        inset 0 1px 0 rgba(255,255,255,0.04);
 }
-label { font-size:13px; display:block; margin-bottom:4px; }
-input[type=text], input[type=file], textarea {
-    width:100%;
-    padding:6px;
+
+h1 {
+    font-size: 18px;
+    margin: 0 0 12px;
+    font-weight: 700;
+    color: #f8fafc;
+    letter-spacing: 0.3px;
 }
+
+h2 {
+    font-size: 15px;
+    margin: 14px 0 8px;
+    font-weight: 600;
+    color: #c7d2fe;
+}
+
+/* フォーム */
+label {
+    font-size: 13px;
+    display: block;
+    margin-bottom: 4px;
+    color: #94a3b8;
+}
+
+input[type="text"],
+input[type="file"],
 textarea {
-    min-height:160px;
+    width: 100%;
+    background: rgba(2, 6, 23, 0.7);
+    color: #e5e7eb;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    padding: 8px;
+    font-size: 14px;
 }
+
+textarea {
+    min-height: 160px;
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: #94a3b8;
+}
+
+/* ボタン */
 button {
-    width:100%;
-    margin-top:12px;
-    padding:10px;
-    border:0;
-    border-radius:10px;
-    background:#2563eb;
-    color:#fff;
-    font-size:14px;
+    width: 100%;
+    margin-top: 12px;
+    padding: 10px;
+    border: 0;
+    border-radius: 12px;
+    background:
+        linear-gradient(135deg, #2563eb, #0ea5e9);
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(37, 99, 235, 0.45);
 }
+
+button:hover {
+    filter: brightness(1.08);
+}
+
+/* メッセージ */
+.msg {
+    margin-bottom: 10px;
+    font-weight: 600;
+    color: #38bdf8;
+}
+
+/* video */
 video {
-    width:100%;
-    margin-top:8px;
-    border-radius:12px;
+    width: 100%;
+    margin-top: 8px;
+    border-radius: 14px;
+    background: rgba(2, 6, 23, 0.6);
 }
+
+/* note */
 .note {
-    font-size:12px;
-    color:#6b7280;
+    font-size: 12px;
+    color: #94a3b8;
+    margin-top: 10px;
+    line-height: 1.6;
+}
+
+/* 結果URL */
+a {
+    color: #38bdf8;
+    word-break: break-all;
+    font-size: 13px;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
 }
 </style>
 </head>

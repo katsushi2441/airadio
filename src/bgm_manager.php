@@ -127,81 +127,191 @@ sort($files);
 <title>BGM Manager</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
+/* ===============================
+   Web3 Navy / Metallic UI
+   bgm_manager.php
+   構造・機能変更なし
+=============================== */
+
 body {
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    background:#f6f7f9;
-    padding:16px;
+    background:
+        radial-gradient(1200px 600px at 10% -10%, #1e3a8a33, transparent 40%),
+        radial-gradient(800px 400px at 90% 10%, #0ea5e933, transparent 35%),
+        linear-gradient(180deg, #020617 0%, #020617 100%);
+    color: #e5e7eb;
+    padding: 16px;
 }
-.wrap { max-width:720px; margin:0 auto; }
+
+.wrap {
+    max-width: 720px;
+    margin: 0 auto;
+}
+
+/* ガラス＋メタリックカード */
 .card {
-    background:#fff;
-    border:1px solid #e5e7eb;
-    border-radius:16px;
-    padding:16px;
-    margin-bottom:16px;
+    background:
+        linear-gradient(
+            135deg,
+            rgba(30, 58, 138, 0.35),
+            rgba(15, 23, 42, 0.65)
+        );
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 18px;
+    padding: 16px;
+    margin-bottom: 18px;
+    backdrop-filter: blur(10px);
+    box-shadow:
+        0 10px 30px rgba(2, 6, 23, 0.6),
+        inset 0 1px 0 rgba(255,255,255,0.04);
 }
-h1 { font-size:18px; margin:0 0 12px; }
-h2 { font-size:15px; margin:16px 0 8px; }
-label { display:block; font-size:13px; margin-bottom:4px; }
-input[type=text], input[type=file] { width:100%; }
+
+h1 {
+    font-size: 18px;
+    margin: 0 0 14px;
+    font-weight: 700;
+    color: #f8fafc;
+    letter-spacing: 0.3px;
+}
+
+h2 {
+    font-size: 15px;
+    margin: 16px 0 8px;
+    font-weight: 600;
+    color: #c7d2fe;
+}
+
+/* フォーム */
+label {
+    display: block;
+    font-size: 13px;
+    margin-bottom: 4px;
+    color: #94a3b8;
+}
+
+input[type="text"],
+input[type="file"],
+input[type="number"],
+input[type="range"] {
+    width: 100%;
+    background: rgba(2, 6, 23, 0.7);
+    color: #e5e7eb;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    padding: 8px;
+    font-size: 14px;
+}
+
+/* ボタン */
 button {
-    width:100%;
-    margin-top:12px;
-    padding:10px;
-    border:0;
-    border-radius:10px;
-    background:#2563eb;
-    color:#fff;
-    font-size:14px;
-    cursor:pointer;
+    width: 100%;
+    margin-top: 12px;
+    padding: 10px;
+    border: 0;
+    border-radius: 12px;
+    background:
+        linear-gradient(135deg, #2563eb, #0ea5e9);
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(37, 99, 235, 0.45);
 }
-button.sub { background:#374151; }
+
+button:hover {
+    filter: brightness(1.08);
+}
+
+button.sub {
+    background: rgba(2, 6, 23, 0.7);
+    box-shadow: none;
+}
+
 .btn-mini {
-    width:auto;
-    margin:2px;
-    padding:6px 10px;
-    font-size:13px;
-    border-radius:8px;
-}
-.td-actions { white-space:nowrap; }
-table { width:100%; border-collapse:collapse; font-size:13px; }
-th, td { border-bottom:1px solid #e5e7eb; padding:8px 4px; }
-audio { width:100%; height:40px; }
-.note { font-size:12px; color:#6b7280; margin-top:8px; }
-
-/* --- BGM一覧の視認性改善（構造変更なし） --- */
-table audio {
-    max-width: 220px;
+    width: auto;
+    margin: 2px;
+    padding: 6px 10px;
+    font-size: 13px;
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.8);
+    color: #e5e7eb;
 }
 
+/* テーブル */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+th, td {
+    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+    padding: 10px 6px;
+    vertical-align: middle;
+}
+
+th {
+    text-align: left;
+    background: rgba(2, 6, 23, 0.6);
+    color: #c7d2fe;
+    font-weight: 600;
+}
+
+tr:hover td {
+    background: rgba(30, 58, 138, 0.12);
+}
+
+/* audio */
+audio {
+    width: 100%;
+    height: 40px;
+    background: rgba(2, 6, 23, 0.6);
+    border-radius: 10px;
+}
+
+/* アクション */
 .td-actions {
     text-align: center;
+    white-space: nowrap;
 }
 
 .td-actions .btn-mini {
     display: inline-block;
 }
 
-/* --- MIX結果を成果物として強調 --- */
+/* ノート */
+.note {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-top: 8px;
+}
+
+/* MIX成果物強調 */
 #mix_result {
-    background: #f9fafb;
+    background:
+        linear-gradient(
+            135deg,
+            rgba(30, 58, 138, 0.3),
+            rgba(15, 23, 42, 0.7)
+        );
     border: 2px solid #2563eb;
-    border-radius: 12px;
-    padding: 12px;
+    border-radius: 14px;
+    padding: 14px;
     font-size: 13px;
+    color: #e5e7eb;
 }
 
 #mix_result audio {
     width: 100%;
     height: 48px;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
 }
 
 #mix_result a {
     word-break: break-all;
     font-size: 12px;
+    color: #38bdf8;
 }
-
 </style>
 </head>
 <body>
