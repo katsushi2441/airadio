@@ -24,6 +24,65 @@ All steps are automated and self-hosted.
 
 ---
 
+## Core Architecture
+
+AIRadio is built around a small but powerful core that acts as a
+media-generation engine rather than a single-purpose application.
+
+### Core Components
+
+The core of AIRadio consists of the following components:
+
+- **airadio.php**  
+  Handles content flow such as input processing, script generation,
+  and orchestration of the overall workflow.
+
+- **voicebox_ui.php**  
+  Provides a user interface for controlling TTS parameters such as
+  speaker, speed, pitch, and intonation.
+
+- **voicebox_api.py**  
+  Exposes unified APIs for controlling LLM-based script generation,
+  text-to-speech synthesis, and ffmpeg-based audio/video processing.
+
+Together, these components form the **AIRadio Core Engine**.
+
+### Plugin-Oriented Design
+
+Because the AI and media-processing logic is exposed through simple APIs,
+developers can build optional, plugin-style products using plain PHP
+without modifying the core engine.
+
+This makes AIRadio highly extensible and suitable for a wide range of
+media-generation use cases.
+
+### Optional Plugin Products
+
+AIRadio already demonstrates this extensibility through optional products,
+such as:
+
+- **audio2mp4** – Converts audio and scripts into subtitle-based videos  
+- **video2mp4** – Reconstructs video content using the same core pipeline
+
+These plugins prove that AIRadio’s core technology can be reused beyond
+radio generation.
+
+### Proven Use Cases
+
+The same core architecture can be applied to:
+
+- Radio-style news and podcast generation
+- Subtitle-based music videos (MV) for YouTube and TikTok
+- Storytelling and read-aloud content
+- Product introduction videos
+- Product manual and tutorial videos
+
+AIRadio is designed to grow by adding new plugins, showcasing its future
+potential through real, working extensions rather than hypothetical ideas.
+
+
+---
+
 ## Outputs (What users get)
 
 - 🎧 Radio-style audio episodes (WAV / MP3)

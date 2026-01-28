@@ -305,14 +305,49 @@ a {
 a:hover {
     text-decoration: underline;
 }
+/* ===============================
+   Top Navigation
+=============================== */
+.top-nav {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+
+.top-nav a {
+    display: inline-block;
+    padding: 8px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #e5e7eb;
+    text-decoration: none;
+    background: rgba(2, 6, 23, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    backdrop-filter: blur(8px);
+}
+
+.top-nav a:hover {
+    background: rgba(30, 58, 138, 0.45);
+}
+
 </style>
 </head>
 <body>
 
 <div class="wrap">
+<div class="top-nav">
+    <a href="airadio.php">News2Audio</a>
+    <a href="voicebox_ui.php">Voicebox UI</a>
+    <a href="bgm_manager.php">BGM Manager</a>
+    <a href="ttsfile.php">TTS Files</a>
+    <a href="audio2mp4.php">Audio2MP4</a>
+    <a href="video2mp4.php">Video2MP4</a>
+</div>
 
 <div class="card">
-<h1>🎵 音声ファイルアップロード</h1>
+<h1>🎵 音声/楽曲ファイルアップロード</h1>
 
 <form method="post" enctype="multipart/form-data">
 <input type="hidden" name="upload_audio" value="1">
@@ -320,12 +355,12 @@ a:hover {
 <label>音声ファイル（mp3 / wav）</label>
 <input type="file" name="audio_file" accept=".mp3,.wav" required>
 
-<button type="submit">音声をアップロード</button>
+<button type="submit">音声/楽曲をアップロード</button>
 </form>
 </div>
 
 <div class="card">
-<h1>🎬 ラジオ音声＋台本 → MP4</h1>
+<h1>🎬静止画像＋ラジオ音声＋台本 → MP4</h1>
 
 <?php if ($msg !== ""): ?>
 <div><?php echo $msg; ?></div>
@@ -336,7 +371,7 @@ a:hover {
 <label>① 背景画像</label>
 <input type="file" name="image" accept="image/*" required>
 
-<label style="margin-top:12px;">② 音声URL</label>
+<label style="margin-top:12px;">② 音声/楽曲URL</label>
 <input type="text" name="audio_url" value="<?php echo htmlspecialchars($audio_url, ENT_QUOTES, "UTF-8"); ?>" required>
 
 <label style="margin-top:12px;">③ ラジオ台本（スクロール表示）</label>
@@ -346,7 +381,7 @@ a:hover {
 </form>
 
 <div class="note">
-・先に音声をアップロードしてください<br>
+・先に音声/楽曲をアップロードしてください<br>
 ・URLが確定してから MP4 を生成します
 </div>
 </div>

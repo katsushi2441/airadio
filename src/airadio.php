@@ -527,15 +527,52 @@ audio {
     background: rgba(2, 6, 23, 0.6);
     border-radius: 10px;
 }
-</style>
 
+/* ===============================
+   Top Navigation
+=============================== */
+.top-nav {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+
+.top-nav a {
+    display: inline-block;
+    padding: 8px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #e5e7eb;
+    text-decoration: none;
+    background: rgba(2, 6, 23, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    backdrop-filter: blur(8px);
+}
+
+.top-nav a:hover {
+    background: rgba(30, 58, 138, 0.45);
+}
+
+</style>
+</head>
 <body>
 <div class="wrap">
+<div class="top-nav">
+    <a href="airadio.php">News2Audio</a>
+    <a href="voicebox_ui.php">Voicebox UI</a>
+    <a href="bgm_manager.php">BGM Manager</a>
+    <a href="ttsfile.php">TTS Files</a>
+    <a href="audio2mp4.php">Audio2MP4</a>
+    <a href="video2mp4.php">Video2MP4</a>
+</div>
+
 
     <div class="card">
-        <h1>ニュースラジオ生成</h1>
+        <h1>指定したキーワードに関連するニュースからラジオ生成</h1>
         <div class="muted">
-        1. ニュース取得 -> 2. AIで台本生成 -> 3. TTSで音声生成
+        1. キーワードで検索されたニュース取得 -> 2. AIで台本生成 -> 3. TTSで音声生成
         </div>
         <?php if ($err !== ""): ?>
             <div class="err" style="margin-top:10px;"><?php echo htmlspecialchars($err, ENT_QUOTES, "UTF-8"); ?></div>
@@ -544,7 +581,7 @@ audio {
             <input type="text" name="keyword"
                    value="<?php echo isset($_POST['keyword']) ? htmlspecialchars($_POST['keyword'], ENT_QUOTES, 'UTF-8') : ''; ?>"
                    placeholder="検索キーワード">
-            <button class="btn" type="submit" name="generate" value="1">ニュースから台本を生成</button>
+            <button class="btn" type="submit" name="generate" value="1">キーワード検索したニュースから台本を生成</button>
         </form>
     </div>
 
@@ -573,7 +610,7 @@ audio {
        value="<?php echo isset($_GET["file"]) ? htmlspecialchars($_GET["file"], ENT_QUOTES, 'UTF-8') : ''; ?>">
 
             <div class="row" style="margin-top:10px;">
-                <button class="btn2" type="submit" name="tts" value="1">この台本で音声生成</button>
+                <button class="btn2" type="submit" name="tts" value="1">台本から音声生成</button>
                 <button class="btn" type="submit" name="save_script" value="1">
 台本を保存
 </button>

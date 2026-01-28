@@ -372,11 +372,45 @@ audio {
         margin-top: 8px;
     }
 }
+/* ===============================
+   Top Navigation
+=============================== */
+.top-nav {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+
+.top-nav a {
+    display: inline-block;
+    padding: 8px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #e5e7eb;
+    text-decoration: none;
+    background: rgba(2, 6, 23, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    backdrop-filter: blur(8px);
+}
+
+.top-nav a:hover {
+    background: rgba(30, 58, 138, 0.45);
+}
 </style>
 
 </head>
 <body>
 <div class="wrap">
+<div class="top-nav">
+    <a href="airadio.php">News2Audio</a>
+    <a href="voicebox_ui.php">Voicebox UI</a>
+    <a href="bgm_manager.php">BGM Manager</a>
+    <a href="ttsfile.php">TTS Files</a>
+    <a href="audio2mp4.php">Audio2MP4</a>
+    <a href="video2mp4.php">Video2MP4</a>
+</div>
 <div class="card">
 
 <h1>TTS音声ファイル管理</h1>

@@ -153,6 +153,103 @@ def audio_to_mp4(
     }
 
 
+# =========================
+# mp3 / wav + 動画(mp4) → mp4（背景動画用）
+# =========================
+@app.post("/audio_to_video_mp4")
+def audio_to_video_mp4(
+    image: UploadFile = File(...),
+    audio_url: str = Form(...),
+    script_text: str = Form("")
+):
+    if not audio_url:
+        raise HTTPException(status_code=400, detail="audio_url required")
+
+    # 動画のみ許可
+    vid_ext = Path(image.filename).suffix.lower()
+    if vid_ext != ".mp4":
+        raise HTTPException(status_code=400, detail="mp4 only")
+
+    vid_name = uuid.uuid4().hex + vid_ext
+    vid_path = VIDEO_IMG_DIR / vid_name
+
+    with vid_path.open("wb") as f:
+        shutil.copyfileobj(image.file, f)
+
+    # 台本一時ファイル
+    script_file = None
+    if script_text.strip():
+        tf = tempfile.NamedTemporaryFile(delete=False, suffix=".txt", mode="w", encoding="utf-8")
+        tf.write(script_text)
+        tf.close()
+        script_file = tf.name
+
+    base = Path(audio_url).stem
+    out_mp4 = VIDEO_OUT_DIR / f"{base}.mp4"
+
+    # 音声長取得
+    probe = subprocess.run(
+        [
+            "ffprobe", "-v", "error",
+            "-select_streams", "a:0",
+            "-show_entries", "format=duration",
+            "-of", "json",
+            audio_url
+        ],
+        capture_output=True,
+        text=True
+    )
+
+    try:
+        duration = float(json.loads(probe.stdout)["format"]["duration"])
+    except Exception:
+        duration = 1.0
+
+    drawtext = ""
+    if script_file:
+        drawtext = (
+            "drawtext="
+            "fontfile=/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc:"
+            f"textfile={script_file}:"
+            "fontsize=36:"
+            "fontcolor=white:"
+            "line_spacing=10:"
+            "x=(w-text_w)/2+72:"
+            f"y=h-230-(t/{duration})*(h+text_h)"
+        )
+
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i", str(vid_path),     # 背景動画（音声含まれていてもOK）
+        "-i", audio_url,         # 使う音声
+        "-map", "0:v:0",         # 動画は背景のみ
+        "-map", "1:a:0",         # 音声は外部のみ
+    ]
+
+    if drawtext:
+        cmd += ["-vf", drawtext]
+
+    cmd += [
+        "-c:v", "libx264",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-shortest",
+        str(out_mp4)
+    ]
+
+    p = subprocess.run(cmd, capture_output=True, text=True)
+
+    if p.returncode != 0:
+        raise HTTPException(status_code=500, detail=p.stderr)
+
+    return {
+        "ok": True,
+        "file": out_mp4.name,
+        "mp4_url": f"https://exbridge.ddns.net/aidexx/video_mp4/{out_mp4.name}"
+    }
+
 
 @app.post("/mix")
 def mix_audio(req: MixRequest):
