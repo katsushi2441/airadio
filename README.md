@@ -298,8 +298,8 @@ Request parameters:
 Response example:
 
 - ok: true
-- file: xxxxxxxx.mp4
-- mp4_url: https://exbridge.ddns.net/aidexx/video_mp4/xxxxxxxx.mp4
+- file: music.mp4
+- mp4_url: https://exbridge.ddns.net/aidexx/video_mp4/music.mp4
 
 ---
 
