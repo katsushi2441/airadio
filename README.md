@@ -185,26 +185,24 @@ and fully automated TTS generation via scripts.
 
 ---
 
-### Architecture Overview
+## Architecture Overview
 
 ```mermaid
 graph TD
-    Core[AIRadio Core<br/>airadio.php<br/>voicebox_ui.php<br/>voicebox_api.py]
+    Core["AIRadio Core<br/>airadio.php<br/>voicebox_ui.php<br/>voicebox_api.py"]
 
-    Core --> A[audio2mp4<br/>Optional Plugin]
-    Core --> V[video2mp4<br/>Optional Plugin]
-    Core --> O[Other Plugins<br/>Read-aloud / Product Video / Manual]
+    Core --> A["audio2mp4<br/>Optional Plugin"]
+    Core --> V["video2mp4<br/>Optional Plugin"]
+    Core --> O["Other Plugins<br/>Read-aloud / Product Video / Manual"]
 
-    Core:::core
-    A:::plugin
-    V:::plugin
-    O:::plugin
+    class Core core
+    class A plugin
+    class V plugin
+    class O plugin
 
-    classDef core fill:#1e3a8a,color:#fff,stroke:#93c5fd,stroke-width:1px;
+    classDef core fill:#1e3a8a,color:#ffffff,stroke:#93c5fd,stroke-width:1px;
     classDef plugin fill:#020617,color:#e5e7eb,stroke:#64748b,stroke-width:1px;
-
-
----
+```
 
 ## Background Music (BGM) Support
 
