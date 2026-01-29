@@ -1,6 +1,6 @@
-# AI Radio Generator
+# AIRadio
 
-AI Radio Generator is an automated AI media pipeline that generates  
+AIRadio is an automated AI media pipeline that generates  
 radio-style audio episodes, background-mixed narration, MP4 videos, and  
 podcast-compatible RSS feeds from news articles or keywords.
 
@@ -11,7 +11,7 @@ recording, editing, or voice work.
 
 ## What this project does
 
-AI Radio Generator provides a fully automated workflow:
+AIRadio provides a fully automated workflow:
 
 - Ingests news articles or keyword-based content
 - Generates radio-style scripts using Large Language Models (LLMs)
@@ -208,7 +208,7 @@ graph TD
 
 ## Background Music (BGM) Support
 
-AI Radio Generator supports optional background music (BGM)
+AIRadio supports optional background music (BGM)
 as part of its audio post-processing pipeline.
 
 Generated radio narration can be mixed with background music
@@ -260,7 +260,7 @@ Directory: mixed/
 
 ## Audio to MP4 Video Generation
 
-AI Radio Generator includes an optional feature to convert
+AIRadio includes an optional feature to convert
 generated radio audio into MP4 video files by combining
 the audio with a single static image.
 

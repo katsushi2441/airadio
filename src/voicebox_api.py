@@ -114,9 +114,11 @@ def audio_to_mp4(
             f"textfile={script_file}:"
             "fontsize=36:"
             "fontcolor=white:"
+            "borderw=2:"
+            "bordercolor=black:"
             "line_spacing=10:"
-            "x=(w-text_w)/2+72:"
-            f"y=h-230-(t/{duration})*(h+text_h)"
+            "x=(w-text_w)/2:"
+            f"y=h-200-(t/{duration})*(h+text_h/2)"
         )
 
     cmd = [
@@ -211,11 +213,13 @@ def audio_to_video_mp4(
             "drawtext="
             "fontfile=/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc:"
             f"textfile={script_file}:"
-            "fontsize=36:"
+            "fontsize=16:"
             "fontcolor=white:"
+            "borderw=2:"
+            "bordercolor=black:"
             "line_spacing=10:"
-            "x=(w-text_w)/2+72:"
-            f"y=h-230-(t/{duration})*(h+text_h)"
+            "x=(w-text_w)/2:"
+            f"y=h-200-(t/{duration})*(h+text_h/2)"
         )
 
     cmd = [

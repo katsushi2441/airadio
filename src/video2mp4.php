@@ -1,4 +1,6 @@
 <?php
+
+
 // =========================================
 // audio2mp4.php
 // 画像 + mp3/wav URL + ラジオ台本 → mp4 生成（スクロール対応）
@@ -12,7 +14,7 @@ define("API_ENDPOINT", "http://exbridge.ddns.net:8002/audio_to_video_mp4");
 
 
 $musicDir = __DIR__ . "/musics";
-$musicUrlBase = "https://exbridge.jp/aidexx/musics";
+$musicUrlBase = "https://airadio.exbridge.jp/musics";
 
 if (!is_dir($musicDir)) {
     mkdir($musicDir, 0755, true);
@@ -102,6 +104,7 @@ if (
     $_SERVER["REQUEST_METHOD"] === "POST"
     && !isset($_POST["upload_audio"])
 ) {
+
     if (
         isset($_FILES["image"])
         && isset($_POST["audio_url"])
@@ -125,6 +128,7 @@ if (
                 $_FILES["image"]["name"]
             )
         );
+        
 
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, $post);
@@ -294,7 +298,8 @@ video {
 <div class="card">
 <h1>🎵 音声/楽曲ファイルアップロード</h1>
 
-<form method="post" enctype="multipart/form-data">
+<form method="post" enctype="multipart/form-data" action="video2mp4.php">
+
 <input type="hidden" name="upload_audio" value="1">
 
 <label>音声/楽曲ファイル（mp3 / wav）</label>

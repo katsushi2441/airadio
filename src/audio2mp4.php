@@ -11,7 +11,7 @@ date_default_timezone_set("Asia/Tokyo");
 define("API_ENDPOINT", "http://exbridge.ddns.net:8002/audio_to_mp4");
 
 $musicDir = __DIR__ . "/musics";
-$musicUrlBase = "https://exbridge.jp/aidexx/musics";
+$musicUrlBase = "https://airadio.exbridge.jp/musics";
 
 if (!is_dir($musicDir)) {
     mkdir($musicDir, 0755, true);
