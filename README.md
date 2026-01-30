@@ -315,6 +315,27 @@ The project is designed with a modular architecture, making it easy to:
 
 ---
 
+## airadio SaaS Template
+
+airadio can be extended beyond a single-instance setup.
+
+For those who want to offer AI radio generation as a service,
+we provide an official SaaS starter template.
+
+**airadio saas template** is a ready-to-use web application template
+for building multi-user AI Radio services powered by airadio.
+
+It is suitable for:
+- SaaS platforms
+- Internal tools for teams
+- Client-based AI radio production
+- Experimental AI media services
+
+### Official Website
+https://airadiosaas.exbridge.jp/
+
+---
+
 ## License
 
 MIT License
