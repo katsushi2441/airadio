@@ -1,0 +1,153 @@
+INSTALL
+=======
+
+This project uses a TWO-SERVER ARCHITECTURE.
+
+All heavy processing (LLM, TTS, audio/video generation) runs on a GPU
+application server. The web server is responsible only for UI and request
+orchestration.
+
+Do NOT install ffmpeg or AI components on the web server.
+
+-----------------------------------------------------------------------
+
+1. ARCHITECTURE OVERVIEW
+-----------------------
+
+[ Web Server ]
+- PHP-based UI
+- User input and log management
+- Sends HTTP requests to the application server
+- NO media processing
+
+[ Application Server (GPU) ]
+- Ollama (LLM)
+- VOICEVOX (Text-to-Speech)
+- ffmpeg (audio/video processing)
+- FastAPI (API integration layer)
+
+-----------------------------------------------------------------------
+
+2. REQUIREMENTS
+---------------
+
+Application Server (GPU required):
+- Linux (Ubuntu 20.04+ recommended)
+- NVIDIA GPU with drivers installed
+- Python 3.9+
+- ffmpeg
+- Ollama
+- VOICEVOX Engine
+- FastAPI / Uvicorn
+
+Web Server:
+- PHP 7.4+
+- Apache or Nginx
+- curl enabled
+
+-----------------------------------------------------------------------
+
+3. APPLICATION SERVER SETUP (GPU)
+---------------------------------
+
+3.1 Install Ollama
+
+    curl -fsSL https://ollama.com/install.sh | sh
+
+Pull a model:
+
+    ollama pull gemma3:12b
+
+Ollama API will be available at:
+
+    http://localhost:11434
+
+------------------------------------------------
+
+3.2 Install VOICEVOX Engine (CPU version)
+
+Download and extract the VOICEVOX engine:
+
+    https://github.com/VOICEVOX/voicevox_engine/releases
+
+Run the engine:
+
+    ./run
+
+VOICEVOX API default endpoint:
+
+    http://localhost:50021
+
+------------------------------------------------
+
+3.3 Install ffmpeg
+
+    sudo apt update
+    sudo apt install -y ffmpeg
+
+Verify:
+
+    ffmpeg -version
+
+------------------------------------------------
+
+3.4 Setup FastAPI
+
+Create virtual environment:
+
+    python3 -m venv venv
+    source venv/bin/activate
+
+Install dependencies:
+
+    pip install fastapi uvicorn requests
+
+Run API server:
+
+    uvicorn main:app --host 0.0.0.0 --port 8002
+
+-----------------------------------------------------------------------
+
+4. WEB SERVER SETUP
+-------------------
+
+- Deploy PHP files to the web server document root
+- Configure API endpoint to point to the GPU server
+
+Example:
+
+    define("API_ENDPOINT", "http://GPU_SERVER_IP:8002");
+
+The web server must NOT perform:
+- LLM processing
+- TTS processing
+- Audio or video generation
+- ffmpeg execution
+
+-----------------------------------------------------------------------
+
+5. NETWORK CONFIGURATION
+------------------------
+
+- Web Server -> Application Server: HTTP (JSON)
+- Application Server ports:
+  - 11434 (Ollama)
+  - 50021 (VOICEVOX)
+  - 8002  (FastAPI)
+
+Ensure these ports are accessible from the web server.
+
+-----------------------------------------------------------------------
+
+6. IMPORTANT NOTES
+------------------
+
+- ffmpeg MUST run on the application server only
+- The web server should remain lightweight and stable
+- This architecture allows horizontal scaling of GPU nodes
+- Designed for production and SaaS deployment
+
+-----------------------------------------------------------------------
+
+END OF INSTALL
+
