@@ -1,640 +1,78 @@
 <?php
-// =========================================
-// airadio.php
-// ニュース → 5分ラジオ台本生成（Ollama）→ 音声生成（TTS API）
-// =========================================
-
-// -------------------------
-// 設定
-// -------------------------
-date_default_timezone_set("Asia/Tokyo");
-
-// Google News RSS（デフォルト）
-define("NEWS_RSS", "https://news.google.com/rss?hl=ja&gl=JP&ceid=JP:ja");
-
-// Ollama
-define("OLLAMA_URL", "https://exbridge.ddns.net/api/generate");
-define("OLLAMA_MODEL", "gemma3:12b");
-
-// TTS（成功していたまま）
-define("TTS_URL", "http://exbridge.ddns.net:8002/tts");
-
-// 生成するニュース件数
-define("NEWS_LIMIT", 8);
-
-// -------------------------
-// VOICE プロファイル読込
-// -------------------------
-$voice_profile = [
-    "speaker" => 2,
-    "speed" => 1.0,
-    "pitch" => 0.0,
-    "intonation" => 1.0,
-    "volume" => 1.0,
-];
-
-$profile_file = __DIR__ . "/voice_profile.json";
-if (file_exists($profile_file)) {
-    $json = json_decode(file_get_contents($profile_file), true);
-    if (is_array($json)) {
-        $voice_profile = array_merge($voice_profile, $json);
-    }
-}
-
-// -------------------------
-// ユーティリティ
-// -------------------------
-function append_audio_log($audio_url, $keyword, $script) {
-    $logFile = __DIR__ . "/airadio_log.json";
-
-    $list = [];
-    if (file_exists($logFile)) {
-        $json = file_get_contents($logFile);
-        $list = json_decode($json, true);
-        if (!is_array($list)) $list = [];
-    }
-
-    $path = parse_url($audio_url, PHP_URL_PATH);
-    $file = basename($path);
-
-    $list[] = [
-        "file" => $file,
-        "datetime" => date("Y-m-d H:i:s"),
-        "keyword" => $keyword,
-        "script" => $script
-    ];
-
-    file_put_contents(
-        $logFile,
-        json_encode($list, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)
-    );
-}
-
-function http_get($url, $timeout = 15) {
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_TIMEOUT => $timeout,
-        CURLOPT_CONNECTTIMEOUT => $timeout,
-        CURLOPT_USERAGENT => "airadio.php/1.0",
-        CURLOPT_SSL_VERIFYPEER => true,
-        CURLOPT_SSL_VERIFYHOST => 2,
-    ]);
-    $res = curl_exec($ch);
-    $err = curl_error($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    if ($res === false) return [false, "curl_error: ".$err, $code];
-    if ($code < 200 || $code >= 300) return [false, "http_status: ".$code, $code];
-    return [true, $res, $code];
-}
-
-function http_post_json($url, $payload, $timeout = 60) {
-    $ch = curl_init($url);
-    $json = json_encode($payload, JSON_UNESCAPED_UNICODE);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_TIMEOUT => $timeout,
-        CURLOPT_CONNECTTIMEOUT => 15,
-        CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => $json,
-        CURLOPT_HTTPHEADER => [
-            "Content-Type: application/json",
-            "Accept: application/json",
-        ],
-    ]);
-    $res = curl_exec($ch);
-    $err = curl_error($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    if ($res === false) return [false, "curl_error: ".$err, $code, null];
-    $data = json_decode($res, true);
-
-
-
-
-
-    return [($code >= 200 && $code < 300), $res, $code, $data];
-}
-
-function fetch_news_items() {
-
-    $rss = NEWS_RSS;
-
-    if (isset($_POST["keyword"]) && $_POST["keyword"] !== "") {
-        $rss = "https://news.google.com/rss/search?q="
-             . urlencode($_POST["keyword"])
-             . "&hl=ja&gl=JP&ceid=JP:ja";
-    }
-
-    list($ok, $body, $code) = http_get($rss, 20);
-    if (!$ok) return [false, "RSS取得失敗: ".$body, []];
-
-    libxml_use_internal_errors(true);
-    $xml = simplexml_load_string($body);
-    if ($xml === false) return [false, "RSS解析失敗", []];
-
-    $items = [];
-    if (!isset($xml->channel->item)) return [true, "", []];
-
-    $count = 0;
-    foreach ($xml->channel->item as $item) {
-        $title = trim((string)$item->title);
-        $link  = trim((string)$item->link);
-        $pub   = trim((string)$item->pubDate);
-        if ($title === "" || $link === "") continue;
-
-        $items[] = [
-            "title" => $title,
-            "link" => $link,
-            "pubDate" => $pub,
-        ];
-        $count++;
-        if ($count >= NEWS_LIMIT) break;
-    }
-    return [true, "", $items];
-}
-
-function build_prompt($news_items) {
-    global $keyword;
-    $today = date("Y-m-d H:i");
-    $lines = [];
-    $i = 1;
-    foreach ($news_items as $n) {
-        $lines[] = $i.". ".$n["title"]." (".$n["pubDate"].")";
-        $lines[] = "   ".$n["link"];
-        $i++;
-    }
-    $news_text = implode("\n", $lines);
-
-    $prompt = "
-あなたはプロのラジオ構成作家です。
-以下のニュース一覧を参考に、約5分番組用の
-【実際にそのまま読み上げる日本語のセリフ本文】だけを作ってください。
-
-# 今日の日時
-{$today}
-
-# ニュース一覧（参考）
-{$news_text}
-
-# 条件
-- 尺は約5分。文字数の目安は1200〜1700文字。
-- 口語で、聞き取りやすい短文を中心にする。
-- 構成は「自然な導入 → 今日の注目トピック3本 → 小ネタ1本 → まとめ」の流れにする。
-- ニュース内容は断定しすぎず、「〜と報じられています」「〜の可能性があります」など慎重な表現を使う。
-- 一般の日本語話者に分かるよう、専門用語は噛み砕いて説明する。
-
-# 出力形式に関する最重要ルール
-- あなたは質問に答えたり、指示に返事をする存在ではない。
-- これから出力する文章は「完成済みのラジオ原稿」であり、会話ではない。
-- 読者や依頼者、指示内容に言及してはいけない。
-- 出力の冒頭で、挨拶、返答、前置き、断り書き、確認文を一切書いてはいけない。
-
-# 冒頭文に関する絶対ルール
-- 冒頭に挨拶を入れてはいけない。
-- 聞き手の感情や思考を推測する表現を書いてはいけない。
-- 「お伝えします」「ご紹介します」など説明者視点の文を冒頭に使ってはいけない。
-- 冒頭の一文は、番組のテーマを端的に示す事実ベースの文にすること。
-
-# 出力に関する厳格な制限（最重要）
-- 説明文、演出指示、ト書きは一切書かない。
-- 「オープニング」「エンディング」「BGM」「SE」「パーソナリティ」などの語を使わない。
-- 括弧（ ）やコロン「：」を使わない。
-- 見出し、箇条書き、記号、強調表現を使わない。
-- URLや注釈を書かない。
-- 出力は【人がそのまま音声で読み上げるセリフ本文のみ】に限定する。
-
-# 絶対禁止事項
-- 「はい」「承知しました」「了解です」「わかりました」「以下が」「それでは」などの
-  指示に対する返答・前置き・開始宣言を一切書いてはいけない。
-- 「これから」「今回」「本日は」「ご紹介します」などのメタ的な導入表現を書いてはいけない。
-
-# 開始条件（厳守）
-- 出力は必ず、番組本文の最初のセリフから書き始めること。
-- 先頭の一文は、すぐに内容に入る自然な日本語の文章にすること。
-- 先頭の文字は必ず日本語の本文から始めること。
-
-# 開始文（この一文から必ず書き始めること・改変禁止）
-- {$keyword}に関するニュースです。
-";
-
-    return $prompt;
-}
-
-function ollama_generate_script($prompt) {
-    $payload = [
-        "model" => OLLAMA_MODEL,
-        "prompt" => $prompt,
-        "stream" => false,
-        "options" => [
-            "temperature" => 0.7,
-        ],
-    ];
-    list($ok, $raw, $code, $data) = http_post_json(OLLAMA_URL, $payload, 120);
-    if (!$ok || !is_array($data) || !isset($data["response"])) {
-        $msg = "Ollama生成失敗 (HTTP {$code})";
-        if (is_string($raw) && $raw !== "") $msg .= " / ".$raw;
-        return [false, $msg, ""];
-    }
-    $text = trim($data["response"]);
-    return [true, "", $text];
-}
-
-function tts_generate_audio($text) {
-    global $voice_profile;
-
-    $payload = [
-        "text" => $text,
-        "speaker" => (int)$voice_profile["speaker"],
-        "speed" => (float)$voice_profile["speed"],
-        "pitch" => (float)$voice_profile["pitch"],
-        "intonation" => (float)$voice_profile["intonation"],
-        "volume" => (float)$voice_profile["volume"],
-    ];
-
-    list($ok, $raw, $code, $data) = http_post_json(TTS_URL, $payload, 120);
-    if (!$ok || !is_array($data)) {
-        $msg = "TTS失敗 (HTTP {$code})";
-        if (is_string($raw) && $raw !== "") $msg .= " / ".$raw;
-        return [false, $msg, ""];
-    }
-
-    if (isset($data["audio_url"]) && is_string($data["audio_url"])) {
-        return [true, "", $data["audio_url"]];
-    }
-    if (isset($data["url"]) && is_string($data["url"])) {
-        return [true, "", $data["url"]];
-    }
-    return [false, "TTS応答に audio_url がありません: ".$raw, ""];
-}
-
-// -------------------------
-// メイン処理
-// -------------------------
-$err = "";
-$news_items = [];
-$script = "";
-$audio_url = "";
-$keyword = isset($_POST["keyword"]) ? (string)$_POST["keyword"] : "";
-
-
-// -------------------------
-// file指定で台本を読み込む
-// -------------------------
-if (isset($_GET["file"]) && $_GET["file"] !== "") {
-    $target = basename($_GET["file"]);
-    $logFile = __DIR__ . "/airadio_log.json";
-
-    if (file_exists($logFile)) {
-        $list = json_decode(file_get_contents($logFile), true);
-        if (is_array($list)) {
-            foreach ($list as $row) {
-                if (isset($row["file"]) && $row["file"] === $target) {
-                    if (isset($row["script"])) {
-                        $script = $row["script"];
-                    }
-                    break;
-                }
-            }
-        }
-    }
-}
-
-// -------------------------
-// 台本の更新保存（airadio.php メイン処理）
-// -------------------------
-if (isset($_POST["save_script"])) {
-
-    $file = isset($_POST["file"]) ? basename((string)$_POST["file"]) : "";
-    $script = isset($_POST["script"]) ? trim((string)$_POST["script"]) : "";
-
-    $logFile = __DIR__ . "/airadio_log.json";
-
-    if ($file !== "" && file_exists($logFile)) {
-
-        $list = json_decode(file_get_contents($logFile), true);
-
-        if (is_array($list)) {
-
-            foreach ($list as &$row) {
-
-                if (
-                    isset($row["file"])
-                    && $row["file"] === $file
-                ) {
-                    $row["script"] = $script;
-                    $row["datetime"] = date("Y-m-d H:i:s");
-                    break;
-                }
-
-            }
-
-            file_put_contents(
-                $logFile,
-                json_encode(
-                    $list,
-                    JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT
-                )
-            );
-        }
-    }
-}
-
-
-
-if (isset($_POST["generate"])) {
-    list($ok, $msg, $news_items) = fetch_news_items();
-    if (!$ok) {
-        $err = $msg;
-    } else {
-        $prompt = build_prompt($news_items);
-        list($ok2, $msg2, $script) = ollama_generate_script($prompt);
-        if (!$ok2) $err = $msg2;
-    }
-}
-
-if (isset($_POST["tts"])) {
-    $script = isset($_POST["script"]) ? trim((string)$_POST["script"]) : "";
-    if ($script === "") {
-        $err = "台本が空です";
-    } else {
-        list($ok3, $msg3, $audio_url) = tts_generate_audio($script);
-        if (!$ok3) {
-            $err = $msg3;
-        } else {
-            append_audio_log(
-                $audio_url,
-                isset($_POST["keyword"]) ? (string)$_POST["keyword"] : "",
-                $script
-            );
-        }
-
-    }
-}
+require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/lib.php';
+airadio_handle_dev_login();
+$auth = airadio_auth();
+$allowed = !empty($auth['allowed']);
+$loginUrl = $auth['login_url'] ?? '?demo_login=xb_bittensor';
+$logoutUrl = $auth['logout_url'] ?? '?demo_logout=1';
 ?>
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<title>ニュースラジオ生成</title>
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kurage AI VTuber Radio</title>
 <style>
-/* ===============================
-   Web3 Navy / Metallic UI
-   構造・機能変更なし
-=============================== */
-
-body {
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    background:
-        radial-gradient(1200px 600px at 10% -10%, #1e3a8a33, transparent 40%),
-        radial-gradient(800px 400px at 90% 10%, #0ea5e933, transparent 35%),
-        linear-gradient(180deg, #020617 0%, #020617 100%);
-    color: #e5e7eb;
-    padding: 16px;
-}
-
-.wrap {
-    max-width: 980px;
-    margin: 0 auto;
-}
-
-/* ガラス＋メタリック */
-.card {
-    background:
-        linear-gradient(
-            135deg,
-            rgba(30, 58, 138, 0.35),
-            rgba(15, 23, 42, 0.65)
-        );
-    border: 1px solid rgba(148, 163, 184, 0.25);
-    border-radius: 16px;
-    padding: 16px;
-    margin-bottom: 14px;
-    backdrop-filter: blur(10px);
-    box-shadow:
-        0 10px 30px rgba(2, 6, 23, 0.6),
-        inset 0 1px 0 rgba(255,255,255,0.04);
-}
-
-h1 {
-    font-size: 18px;
-    margin: 0 0 10px;
-    font-weight: 700;
-    letter-spacing: 0.3px;
-    color: #f8fafc;
-}
-
-/* ボタン（Web3っぽい発光） */
-.btn {
-    border: 0;
-    background:
-        linear-gradient(135deg, #2563eb, #0ea5e9);
-    color: #ffffff;
-    padding: 10px 16px;
-    border-radius: 12px;
-    cursor: pointer;
-    font-weight: 600;
-    box-shadow:
-        0 6px 18px rgba(37, 99, 235, 0.45);
-}
-
-.btn:hover {
-    filter: brightness(1.08);
-}
-
-.btn2 {
-    border: 1px solid rgba(148, 163, 184, 0.4);
-    background: rgba(2, 6, 23, 0.6);
-    color: #e5e7eb;
-    padding: 10px 16px;
-    border-radius: 12px;
-    cursor: pointer;
-    font-weight: 500;
-}
-
-.btn2:hover {
-    background: rgba(15, 23, 42, 0.8);
-}
-
-/* 入力系 */
-input[type="text"],
-textarea {
-    width: 100%;
-    background: rgba(2, 6, 23, 0.7);
-    color: #e5e7eb;
-    border-radius: 12px;
-    border: 1px solid rgba(148, 163, 184, 0.35);
-    padding: 10px;
-    font-size: 14px;
-    line-height: 1.6;
-}
-
-textarea {
-    min-height: 260px;
-}
-
-input::placeholder,
-textarea::placeholder {
-    color: #94a3b8;
-}
-
-/* テキスト */
-.muted {
-    color: #94a3b8;
-    font-size: 13px;
-}
-
-.err {
-    color: #f87171;
-    font-weight: 600;
-}
-
-/* リスト */
-ul {
-    margin: 8px 0 0 18px;
-}
-
-li {
-    margin-bottom: 8px;
-}
-
-/* リンク */
-a {
-    color: #38bdf8;
-    text-decoration: none;
-}
-
-a:hover {
-    text-decoration: underline;
-}
-
-/* レイアウト */
-.row {
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-    align-items: center;
-}
-
-/* audio */
-audio {
-    background: rgba(2, 6, 23, 0.6);
-    border-radius: 10px;
-}
-
-/* ===============================
-   Top Navigation
-=============================== */
-.top-nav {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    margin-bottom: 14px;
-}
-
-.top-nav a {
-    display: inline-block;
-    padding: 8px 14px;
-    border-radius: 10px;
-    font-size: 13px;
-    font-weight: 600;
-    color: #e5e7eb;
-    text-decoration: none;
-    background: rgba(2, 6, 23, 0.55);
-    border: 1px solid rgba(148, 163, 184, 0.35);
-    backdrop-filter: blur(8px);
-}
-
-.top-nav a:hover {
-    background: rgba(30, 58, 138, 0.45);
-}
-
+:root{--ink:#17324d;--muted:#66839a;--sea:#55c7da;--aqua:#e9fbff;--line:#cbeef4;--accent:#2aa8c7;--paper:rgba(255,255,255,.82)}
+*{box-sizing:border-box} body{margin:0;min-height:100vh;color:var(--ink);font-family:"Hiragino Sans","Yu Gothic",Meiryo,sans-serif;background:radial-gradient(circle at 18% 10%,#fff 0,#f3fcff 28%,transparent 45%),linear-gradient(140deg,#ffffff 0%,#eefbff 45%,#f9fff9 100%);overflow-x:hidden}.shell{max-width:1180px;margin:0 auto;padding:22px}.hero{display:grid;grid-template-columns:1fr 360px;gap:20px;align-items:stretch}.card{background:var(--paper);border:1px solid var(--line);box-shadow:0 24px 80px rgba(42,168,199,.14);border-radius:28px;padding:22px;backdrop-filter:blur(18px)}.brand{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:14px}.brand h1{font-size:clamp(28px,4vw,54px);line-height:1;margin:0;letter-spacing:.02em}.tag{display:inline-flex;padding:8px 12px;border-radius:999px;background:#fff;border:1px solid var(--line);color:var(--accent);font-weight:700}.lead{font-size:18px;line-height:1.9;color:#35536a;max-width:760px}.controls{display:grid;grid-template-columns:1fr 160px;gap:12px;margin-top:18px}.controls input,.controls select{width:100%;border:1px solid var(--line);border-radius:16px;padding:14px 15px;background:#fff;color:var(--ink);font-size:15px}.buttons{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}.btn{border:0;border-radius:999px;padding:12px 18px;font-weight:800;cursor:pointer;background:var(--ink);color:#fff}.btn.secondary{background:#fff;color:var(--ink);border:1px solid var(--line)}.btn.live{background:linear-gradient(135deg,#2aa8c7,#76d7c4)}.avatarStage{position:relative;min-height:560px;overflow:hidden;background:linear-gradient(180deg,#fff 0%,#eafcff 100%)}.orb{position:absolute;border-radius:999px;background:rgba(85,199,218,.16);filter:blur(1px)}.orb.one{width:260px;height:260px;right:-70px;top:-50px}.orb.two{width:160px;height:160px;left:-40px;bottom:50px}.avatar{position:absolute;left:50%;bottom:-8px;transform:translateX(-50%);width:min(88%,420px);filter:drop-shadow(0 22px 40px rgba(42,168,199,.22));transition:transform .16s ease}.avatar.talking{transform:translateX(-50%) translateY(-5px) scale(1.012)}.status{position:absolute;left:18px;right:18px;top:18px;background:rgba(255,255,255,.74);border:1px solid var(--line);border-radius:18px;padding:12px}.meter{height:8px;background:#dcf4f7;border-radius:999px;overflow:hidden;margin-top:8px}.meter span{display:block;height:100%;width:18%;background:linear-gradient(90deg,#46c2d8,#a1e7d8);border-radius:999px;transition:width .2s}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}.log{height:220px;overflow:auto;font-size:14px;line-height:1.7;color:#3c6075}.segment{padding:10px 0;border-bottom:1px solid #dff3f7}.small{font-size:13px;color:var(--muted)}.locked{display:grid;place-items:center;min-height:70vh;text-align:center}.locked .card{max-width:560px}.now{font-size:18px;font-weight:800}.sleepNote{margin-top:18px;padding:16px;border-radius:20px;background:#f7fffd;border:1px solid #d7f5ef;color:#426}
+@media(max-width:900px){.hero,.grid{grid-template-columns:1fr}.avatarStage{min-height:480px}.controls{grid-template-columns:1fr}.shell{padding:12px}.brand{align-items:flex-start;flex-direction:column}}
 </style>
 </head>
 <body>
-<div class="wrap">
-<div class="top-nav">
-    <a href="airadio.php">News2Audio</a>
-    <a href="voicebox_ui.php">Voicebox UI</a>
-    <a href="bgm_manager.php">BGM Manager</a>
-    <a href="ttsfile.php">TTS Files</a>
-    <a href="audio2mp4.php">Audio2MP4</a>
-    <a href="video2mp4.php">Video2MP4</a>
-</div>
-
-
+<?php if (!$allowed): ?>
+  <main class="locked shell"><section class="card"><span class="tag">Kurage AI VTuber Radio</span><h1>xb_bittensor 専用</h1><p class="lead">このAI思考のラジオは、共通ログインで <b>@xb_bittensor</b> のみ利用できます。</p><a class="btn" href="<?= htmlspecialchars($loginUrl) ?>">共通ログイン</a></section></main>
+<?php else: ?>
+<main class="shell">
+  <section class="hero">
     <div class="card">
-        <h1>指定したキーワードに関連するニュースからラジオ生成</h1>
-        <div class="muted">
-        1. キーワードで検索されたニュース取得 -> 2. AIで台本生成 -> 3. TTSで音声生成
-        </div>
-        <?php if ($err !== ""): ?>
-            <div class="err" style="margin-top:10px;"><?php echo htmlspecialchars($err, ENT_QUOTES, "UTF-8"); ?></div>
-        <?php endif; ?>
-        <form method="post" class="row" style="margin-top:12px;">
-            <input type="text" name="keyword"
-                   value="<?php echo isset($_POST['keyword']) ? htmlspecialchars($_POST['keyword'], ENT_QUOTES, 'UTF-8') : ''; ?>"
-                   placeholder="検索キーワード">
-            <button class="btn" type="submit" name="generate" value="1">キーワード検索したニュースから台本を生成</button>
-        </form>
+      <div class="brand"><div><span class="tag">聴きながらよく寝れる</span><h1>Kurage AI<br>VTuber Radio</h1></div><a class="btn secondary" href="<?= htmlspecialchars($logoutUrl) ?>">logout @<?= htmlspecialchars($auth['session_user'] ?? '') ?></a></div>
+      <p class="lead">表ではKurage AI VTuberがラジオのように話し続けます。裏ではkagentreach的な情報収集と台本生成を回し、話題キューへ補充します。テーマ割り込みしても、待たせずブリッジトークから入ります。</p>
+      <div class="controls"><input id="theme" value="バイブコーディングとAI Agentで稼ぐ方法" placeholder="テーマを入力"><select id="hours"><option value="1">1時間</option><option value="2">2時間</option><option value="3">3時間</option><option value="4">4時間</option><option value="5">5時間</option><option value="6">6時間</option></select></div>
+      <div class="buttons"><button class="btn live" id="startBtn">ラジオ開始</button><button class="btn secondary" id="interruptBtn">テーマ割り込み</button><button class="btn secondary" id="stopBtn">停止</button></div>
+      <div class="sleepNote">眠るためのラジオなので、声は穏やかに、話題は深く、テンポはゆっくり。情報収集が遅くても、表の話は止めません。</div>
     </div>
-
-    <?php if (!empty($news_items)): ?>
-    <div class="card">
-        <div style="font-weight:700; margin-bottom:6px;">参考ニュース（<?php echo count($news_items); ?>件）</div>
-        <ul>
-            <?php foreach ($news_items as $n): ?>
-                <li>
-                    <?php echo htmlspecialchars($n["title"], ENT_QUOTES, "UTF-8"); ?>
-                    <div class="muted"><?php echo htmlspecialchars($n["pubDate"], ENT_QUOTES, "UTF-8"); ?></div>
-                    <div><a href="<?php echo htmlspecialchars($n["link"], ENT_QUOTES, "UTF-8"); ?>" target="_blank" rel="noopener">記事を開く</a></div>
-                </li>
-            <?php endforeach; ?>
-        </ul>
-    </div>
-    <?php endif; ?>
-
-    <div class="card">
-        <div style="font-weight:700; margin-bottom:6px;">台本（編集可）</div>
-        <form method="post">
-            <input type="hidden" name="keyword"
-                   value="<?php echo isset($_POST['keyword']) ? htmlspecialchars($_POST['keyword'], ENT_QUOTES, 'UTF-8') : ''; ?>">
-            <textarea name="script"><?php echo htmlspecialchars($script, ENT_QUOTES, "UTF-8"); ?></textarea>
-            <input type="hidden" name="file"
-       value="<?php echo isset($_GET["file"]) ? htmlspecialchars($_GET["file"], ENT_QUOTES, 'UTF-8') : ''; ?>">
-
-            <div class="row" style="margin-top:10px;">
-                <button class="btn2" type="submit" name="tts" value="1">台本から音声生成</button>
-                <button class="btn" type="submit" name="save_script" value="1">
-台本を保存
-</button>
-
-            </div>
-        </form>
-
-        <?php if ($audio_url !== ""): ?>
-            <hr>
-            <div class="muted" style="margin-bottom:6px;">
-                TTS音声URL：
-                <a href="<?php echo htmlspecialchars($audio_url, ENT_QUOTES, "UTF-8"); ?>"
-                   target="_blank" rel="noopener">
-                    <?php echo htmlspecialchars($audio_url, ENT_QUOTES, "UTF-8"); ?>
-                </a>
-            </div>
-            <audio controls style="width:100%;">
-                <source src="<?php echo htmlspecialchars($audio_url, ENT_QUOTES, "UTF-8"); ?>">
-            </audio>
-        <?php endif; ?>
-    </div>
-
-</div>
+    <div class="card avatarStage"><div class="orb one"></div><div class="orb two"></div><div class="status"><div class="small">ON AIR STATUS</div><div class="now" id="nowTalking">待機中</div><div class="small" id="researchStatus">research: idle</div><div class="meter"><span id="meter"></span></div></div><img id="avatar" class="avatar" src="assets/kurage_radio_idle.png" alt="Kurage AI VTuber"></div>
+  </section>
+  <section class="grid"><div class="card"><h2>次に話す内容</h2><div id="currentText" class="log"></div></div><div class="card"><h2>Loop Log</h2><div id="loopLog" class="log"></div></div></section>
+</main>
+<script>
+const api = (action, body) => fetch(`api.php?action=${action}`, {method: body ? 'POST':'GET', headers:{'Content-Type':'application/json'}, body: body ? JSON.stringify(body): undefined}).then(r=>r.json());
+const avatar = document.getElementById('avatar');
+const nowTalking = document.getElementById('nowTalking');
+const currentText = document.getElementById('currentText');
+const loopLog = document.getElementById('loopLog');
+const researchStatus = document.getElementById('researchStatus');
+const meter = document.getElementById('meter');
+let running = false; let endsAt = 0; let speaking = false;
+const bridgeTexts = ['少しだけ、静かな間を置きます。考えは急がなくて大丈夫です。','裏側で情報を集めています。こちらでは、今のテーマをゆっくりほどいていきます。'];
+function log(msg){ const el=document.createElement('div'); el.className='segment'; el.textContent=new Date().toLocaleTimeString()+'  '+msg; loopLog.prepend(el); }
+function setMouth(on){ avatar.src = on ? 'assets/kurage_radio_talk.png' : 'assets/kurage_radio_idle.png'; avatar.classList.toggle('talking', on); meter.style.width = on ? '78%' : '18%'; }
+function speakText(text, title=''){
+  return new Promise(resolve=>{
+    const u = new SpeechSynthesisUtterance(text); u.lang='ja-JP'; u.rate=.82; u.pitch=1.02; u.volume=.92;
+    u.onstart=()=>{ speaking=true; setMouth(true); nowTalking.textContent=title||'話しています'; currentText.textContent=text; };
+    u.onend=()=>{ speaking=false; setMouth(false); resolve(); };
+    u.onerror=()=>{ speaking=false; setMouth(false); resolve(); };
+    speechSynthesis.speak(u);
+  });
+}
+async function radioLoop(){
+  while(running && Date.now() < endsAt){
+    if (speechSynthesis.paused) speechSynthesis.resume();
+    let d; try { d = await api('next'); } catch(e) { d = {item:{title:'ブリッジ',text:bridgeTexts[Math.floor(Math.random()*bridgeTexts.length)]}}; }
+    const item = d.item || {}; log(`${item.source||'segment'}: ${item.title||''}`);
+    await speakText(item.text || bridgeTexts[0], item.title || 'Kurage Radio');
+    await new Promise(r=>setTimeout(r, 900));
+  }
+  running=false; nowTalking.textContent='終了しました'; setMouth(false);
+}
+async function refresh(){ try{ const d=await api('status'); const s=d.state||{}; researchStatus.textContent=`research: ${s.research_status||'idle'} / queue: ${(d.queue?.items||[]).length}`; }catch(e){} }
+setInterval(refresh, 4000); refresh();
+document.getElementById('startBtn').onclick=async()=>{ const theme=document.getElementById('theme').value; const hours=Number(document.getElementById('hours').value||1); const d=await api('start',{theme,duration_hours:hours}); endsAt = Date.now()+hours*3600*1000; running=true; log('radio started'); radioLoop(); };
+document.getElementById('interruptBtn').onclick=async()=>{ const theme=document.getElementById('theme').value; await api('interrupt',{theme}); log('theme interrupted: '+theme); };
+document.getElementById('stopBtn').onclick=async()=>{ running=false; speechSynthesis.cancel(); await api('stop'); log('stopped'); nowTalking.textContent='停止中'; setMouth(false); };
+</script>
+<?php endif; ?>
 </body>
 </html>
-
-
