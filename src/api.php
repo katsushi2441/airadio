@@ -2,7 +2,7 @@
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/lib.php';
 
-airadio_handle_dev_login();
+airadio_handle_login();
 $auth = airadio_require_allowed_json();
 header('Content-Type: application/json; charset=utf-8');
 

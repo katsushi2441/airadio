@@ -28,10 +28,13 @@ uses quiet bridge talk and triggers another background research job.
 
 ## Auth
 
-The app uses URL2AI common login when available:
+The app carries a local copy of the URL2AI common login helper, matching the
+`oss.php` pattern:
 
-```php
-/home/kojima/work/url2ai/src/auth_common.php
+```text
+src/auth_common.php
+airadio.php?airadio_login=1
+airadio.php?airadio_logout=1
 ```
 
 Any logged-in common-login user can listen. The program content is based on the `xb_bittensor` X profile.

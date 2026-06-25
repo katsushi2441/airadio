@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/lib.php';
-airadio_handle_dev_login();
+airadio_handle_login();
 $auth = airadio_auth();
 $allowed = !empty($auth['allowed']);
 $loginUrl = isset($auth['login_url']) ? $auth['login_url'] : '?demo_login=xb_bittensor';

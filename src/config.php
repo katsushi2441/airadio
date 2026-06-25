@@ -13,4 +13,9 @@ const AIRADIO_OLLAMA_MODEL = 'gemma4:12b-it-qat';
 const AIRADIO_KAGENTREACH_DIR = '/home/kojima/work/kagentreach';
 const AIRADIO_KVTUBER_DIR = '/home/kojima/work/kvtuber';
 
+if (!defined('AIGM_BASE_URL')) { define('AIGM_BASE_URL', 'https://airadio.exbridge.jp'); }
+if (!defined('AIGM_AUTH_BASE_URL')) { define('AIGM_AUTH_BASE_URL', 'https://aiknowledgecms.exbridge.jp'); }
+if (!defined('AIGM_COOKIE_DOMAIN')) { define('AIGM_COOKIE_DOMAIN', '.exbridge.jp'); }
+if (!defined('AIGM_ADMIN')) { define('AIGM_ADMIN', AIRADIO_ALLOWED_USER); }
+
 if (!is_dir(AIRADIO_STORAGE_DIR)) { mkdir(AIRADIO_STORAGE_DIR, 0775, true); }
