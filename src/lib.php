@@ -48,8 +48,8 @@ function airadio_append_log($message, $data = []) {
 function airadio_profile_from_session() {
     $profile = ['username' => '', 'name' => '', 'description' => '', 'source' => 'session'];
     if (session_status() !== PHP_SESSION_ACTIVE) { @session_start(); }
-    $profile['username'] = $_SESSION['session_username'] ?? '';
-    $token = $_SESSION['session_access_token'] ?? '';
+    $profile['username'] = isset($_SESSION['session_username']) ? $_SESSION['session_username'] : '';
+    $token = isset($_SESSION['session_access_token']) ? $_SESSION['session_access_token'] : '';
     if ($token !== '') {
         $url = 'https://api.twitter.com/2/users/me?user.fields=description,profile_image_url,public_metrics,verified';
         $ctx = stream_context_create(['http' => [

@@ -6,8 +6,8 @@ airadio_handle_dev_login();
 $auth = airadio_require_allowed_json();
 header('Content-Type: application/json; charset=utf-8');
 
-$action = $_GET['action'] ?? 'status';
-$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+$action = isset($_GET['action']) ? $_GET['action'] : 'status';
+$method = isset($_SERVER['REQUEST_METHOD']) ? $_SERVER['REQUEST_METHOD'] : 'GET';
 $input = json_decode(file_get_contents('php://input') ?: '{}', true);
 if (!is_array($input)) { $input = []; }
 
@@ -23,9 +23,9 @@ if ($action === 'profile') {
 }
 
 if ($action === 'start') {
-    $theme = trim((string)($input['theme'] ?? ''));
+    $theme = trim((string)(isset($input['theme']) ? $input['theme'] : ''));
     if ($theme === '') { $theme = 'AI思考、バイブコーディング、静かな睡眠ラジオ'; }
-    $hours = max(1, min(6, (int)($input['duration_hours'] ?? 1)));
+    $hours = max(1, min(6, (int)(isset($input['duration_hours']) ? $input['duration_hours'] : 1)));
     $now = time();
     $state = airadio_update_state([
         'status' => 'on_air',
@@ -58,7 +58,7 @@ if ($action === 'stop') {
 }
 
 if ($action === 'interrupt') {
-    $theme = trim((string)($input['theme'] ?? ''));
+    $theme = trim((string)(isset($input['theme']) ? $input['theme'] : ''));
     if ($theme === '') { bad('theme_required'); }
     $queue = airadio_queue();
     array_unshift($queue['items'], [
@@ -78,11 +78,11 @@ if ($action === 'interrupt') {
 if ($action === 'next') {
     $state = airadio_state();
     $queue = airadio_queue();
-    $items = $queue['items'] ?? [];
+    $items = isset($queue['items']) ? $queue['items'] : [];
     if (!is_array($items)) { $items = []; }
     $item = array_shift($items);
     if (!$item) {
-        $theme = $state['theme'] ?? 'AI思考';
+        $theme = isset($state['theme']) ? $state['theme'] : 'AI思考';
         $item = [
             'id' => 'bridge-' . time(),
             'theme' => $theme,
@@ -91,19 +91,20 @@ if ($action === 'next') {
             'source' => 'bridge',
             'created_at' => date('c'),
         ];
-        if (($state['research_status'] ?? '') !== 'collecting' && ($state['research_status'] ?? '') !== 'scripting') {
+        $researchStatus = isset($state['research_status']) ? $state['research_status'] : '';
+        if ($researchStatus !== 'collecting' && $researchStatus !== 'scripting') {
             airadio_start_worker($theme, airadio_profile_from_session(), 'queue_empty');
         }
     }
     $queue['items'] = $items;
     airadio_write_json(AIRADIO_QUEUE_FILE, $queue);
-    airadio_update_state(['now_talking' => $item['title'] ?? '', 'loop_state' => 'speaking']);
+    airadio_update_state(['now_talking' => isset($item['title']) ? $item['title'] : '', 'loop_state' => 'speaking']);
     ok(['item' => $item, 'queue_remaining' => count($items), 'state' => airadio_state()]);
 }
 
 if ($action === 'youtube_start') {
-    $streamKey = trim((string)($input['stream_key'] ?? ''));
-    $viewerUrl = trim((string)($input['viewer_url'] ?? AIRADIO_PUBLIC_BASE_URL));
+    $streamKey = trim((string)(isset($input['stream_key']) ? $input['stream_key'] : ''));
+    $viewerUrl = trim((string)(isset($input['viewer_url']) ? $input['viewer_url'] : AIRADIO_PUBLIC_BASE_URL));
     $configPath = AIRADIO_KVTUBER_DIR . '/storage/youtube-live.json';
     $config = file_exists($configPath) ? json_decode(file_get_contents($configPath), true) : [];
     if (!is_array($config)) { $config = []; }

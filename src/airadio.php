@@ -4,8 +4,8 @@ require_once __DIR__ . '/lib.php';
 airadio_handle_dev_login();
 $auth = airadio_auth();
 $allowed = !empty($auth['allowed']);
-$loginUrl = $auth['login_url'] ?? '?demo_login=xb_bittensor';
-$logoutUrl = $auth['logout_url'] ?? '?demo_logout=1';
+$loginUrl = isset($auth['login_url']) ? $auth['login_url'] : '?demo_login=xb_bittensor';
+$logoutUrl = isset($auth['logout_url']) ? $auth['logout_url'] : '?demo_logout=1';
 ?>
 <!doctype html>
 <html lang="ja">
@@ -26,7 +26,7 @@ $logoutUrl = $auth['logout_url'] ?? '?demo_logout=1';
 <main class="shell">
   <section class="hero">
     <div class="card">
-      <div class="brand"><div><span class="tag">聴きながらよく寝れる</span><h1>Kurage AI<br>VTuber Radio</h1></div><a class="btn secondary" href="<?= htmlspecialchars($logoutUrl) ?>">logout @<?= htmlspecialchars($auth['session_user'] ?? '') ?></a></div>
+      <div class="brand"><div><span class="tag">聴きながらよく寝れる</span><h1>Kurage AI<br>VTuber Radio</h1></div><a class="btn secondary" href="<?= htmlspecialchars($logoutUrl) ?>">logout @<?= htmlspecialchars(isset($auth['session_user']) ? $auth['session_user'] : '') ?></a></div>
       <p class="lead">表ではKurage AI VTuberがラジオのように話し続けます。裏ではkagentreach的な情報収集と台本生成を回し、話題キューへ補充します。テーマ割り込みしても、待たせずブリッジトークから入ります。</p>
       <div class="controls"><input id="theme" value="バイブコーディングとAI Agentで稼ぐ方法" placeholder="テーマを入力"><select id="hours"><option value="1">1時間</option><option value="2">2時間</option><option value="3">3時間</option><option value="4">4時間</option><option value="5">5時間</option><option value="6">6時間</option></select></div>
       <div class="buttons"><button class="btn live" id="startBtn">ラジオ開始</button><button class="btn secondary" id="interruptBtn">テーマ割り込み</button><button class="btn secondary" id="stopBtn">停止</button></div>

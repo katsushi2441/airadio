@@ -40,11 +40,12 @@ function airadio_auth() {
     }
     if (airadio_load_url2ai_auth()) {
         $auth = url2ai_auth_bootstrap();
-        $auth['allowed'] = !empty($auth['logged_in']) && ($auth['session_user'] ?? '') === AIRADIO_ALLOWED_USER;
+        $sessionUser = isset($auth['session_user']) ? $auth['session_user'] : '';
+        $auth['allowed'] = !empty($auth['logged_in']) && $sessionUser === AIRADIO_ALLOWED_USER;
         return $auth;
     }
     if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
-    $user = $_SESSION['session_username'] ?? '';
+    $user = isset($_SESSION['session_username']) ? $_SESSION['session_username'] : '';
     return [
         'logged_in' => $user !== '',
         'session_user' => $user,
