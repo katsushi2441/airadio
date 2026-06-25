@@ -24,9 +24,11 @@ if ($action === 'profile') {
 
 if ($action === 'start') {
     $theme = trim((string)(isset($input['theme']) ? $input['theme'] : ''));
-    if ($theme === '') { $theme = 'AI思考、バイブコーディング、静かな睡眠ラジオ'; }
+    $profile = airadio_profile_from_session();
+    if ($theme === '') { $theme = airadio_default_theme_from_profile($profile); }
     $hours = max(1, min(6, (int)(isset($input['duration_hours']) ? $input['duration_hours'] : 1)));
     $now = time();
+    airadio_reset_program_memory();
     $state = airadio_update_state([
         'status' => 'on_air',
         'theme' => $theme,
@@ -36,19 +38,18 @@ if ($action === 'start') {
         'loop_state' => 'speaking',
         'research_status' => 'queued',
     ]);
-    $queue = airadio_queue();
-    if (empty($queue['items'])) {
-        $queue['items'] = [[
-            'id' => 'opening-' . time(),
-            'theme' => $theme,
-            'title' => 'オープニング',
-            'text' => 'こんばんは。Kurage AI VTuber Radioです。今夜は、' . $theme . 'をテーマに、ゆっくり考えていきます。裏側では情報収集を進めながら、こちらでは待たせず、静かに話し続けます。眠くなったら、そのまま目を閉じてください。',
-            'source' => 'opening',
-            'created_at' => date('c'),
-        ]];
-        airadio_write_json(AIRADIO_QUEUE_FILE, $queue);
-    }
-    $pid = airadio_start_worker($theme, airadio_profile_from_session(), 'start');
+    $items = [[
+        'id' => 'opening-' . time(),
+        'theme' => $theme,
+        'title' => 'オープニング',
+        'text' => 'こんばんは。Kurage AI VTuber Radioです。Kurageが話し手、xb_bittensorさんが聞き手です。最初はXプロフィールに合わせて、' . $theme . 'という流れから始めます。短い一般論を繰り返さず、実装、情報収集、収益化、発信の順に、少しずつ深く見ていきます。',
+        'source' => 'opening',
+        'created_at' => date('c'),
+    ]];
+    $items = array_merge($items, airadio_seed_profile_program($theme, $profile));
+    $queue = ['items' => $items, 'updated_at' => date('c')];
+    airadio_write_json(AIRADIO_QUEUE_FILE, $queue);
+    $pid = airadio_start_worker($theme, $profile, 'start');
     ok(['state' => $state, 'worker_pid' => $pid]);
 }
 
@@ -83,11 +84,19 @@ if ($action === 'next') {
     $item = array_shift($items);
     if (!$item) {
         $theme = isset($state['theme']) ? $state['theme'] : 'AI思考';
+        $bridgeCount = isset($state['bridge_count']) ? ((int)$state['bridge_count'] + 1) : 1;
+        $bridgeTexts = [
+            'xb_bittensorさん、次の台本を待つ間に、' . $theme . 'を実装目線で一つだけ分解します。いま見るポイントは、情報収集をどう行動へ変えるかです。',
+            'Kurageから短い補助線です。' . $theme . 'は、ツール名ではなく仕事の流れとして見ると理解しやすくなります。調べる、作る、投稿する、この順番です。',
+            'ここでは同じまとめに戻らず、別の角度から見ます。' . $theme . 'で収益化を考えるなら、まず発信量と検証速度を上げる仕組みが必要です。',
+            '少しだけ技術側に寄せます。' . $theme . 'を動かすには、LLM、ブラウザ操作、ジョブ管理、ログ保存を分けると、失敗しても立て直しやすくなります。',
+        ];
+        $bridgeText = $bridgeTexts[($bridgeCount - 1) % count($bridgeTexts)];
         $item = [
             'id' => 'bridge-' . time(),
             'theme' => $theme,
-            'title' => 'ブリッジトーク',
-            'text' => '少しだけ、静かな間を置きます。裏側では、' . $theme . 'について情報を集めています。次の話題が届くまで、呼吸をゆっくり整えながら、考えの流れをほどいていきましょう。',
+            'title' => '補助線 ' . $bridgeCount,
+            'text' => $bridgeText,
             'source' => 'bridge',
             'created_at' => date('c'),
         ];
@@ -98,7 +107,9 @@ if ($action === 'next') {
     }
     $queue['items'] = $items;
     airadio_write_json(AIRADIO_QUEUE_FILE, $queue);
-    airadio_update_state(['now_talking' => isset($item['title']) ? $item['title'] : '', 'loop_state' => 'speaking']);
+    $patch = ['now_talking' => isset($item['title']) ? $item['title'] : '', 'loop_state' => 'speaking'];
+    if (isset($bridgeCount)) { $patch['bridge_count'] = $bridgeCount; }
+    airadio_update_state($patch);
     ok(['item' => $item, 'queue_remaining' => count($items), 'state' => airadio_state()]);
 }
 

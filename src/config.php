@@ -6,6 +6,7 @@ const AIRADIO_STATE_FILE = AIRADIO_STORAGE_DIR . '/radio_state.json';
 const AIRADIO_QUEUE_FILE = AIRADIO_STORAGE_DIR . '/script_queue.json';
 const AIRADIO_LOG_FILE = AIRADIO_STORAGE_DIR . '/radio_loop.log';
 const AIRADIO_WORKER_LOCK = AIRADIO_STORAGE_DIR . '/worker.lock';
+const AIRADIO_MEMORY_FILE = AIRADIO_STORAGE_DIR . '/talk_memory.json';
 const AIRADIO_PUBLIC_BASE_URL = 'https://airadio.exbridge.jp/airadio.php';
 const AIRADIO_OLLAMA_URL = 'http://192.168.0.3:11434/api/generate';
 const AIRADIO_OLLAMA_MODEL = 'gemma4:12b-it-qat';

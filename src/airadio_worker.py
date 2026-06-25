@@ -5,21 +5,25 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
 import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 ROOT = Path(__file__).resolve().parents[1]
 STORAGE = ROOT / 'storage'
 QUEUE = STORAGE / 'script_queue.json'
 STATE = STORAGE / 'radio_state.json'
 LOCK = STORAGE / 'worker.lock'
+MEMORY = STORAGE / 'talk_memory.json'
 KAGENTREACH = Path(os.environ.get('AIRADIO_KAGENTREACH_DIR', '/home/kojima/work/kagentreach'))
 OLLAMA_URL = os.environ.get('AIRADIO_OLLAMA_URL', 'http://192.168.0.3:11434/api/generate')
 OLLAMA_MODEL = os.environ.get('AIRADIO_OLLAMA_MODEL', 'gemma4:12b-it-qat')
+CLAUDE_MODEL = os.environ.get('AIRADIO_CLAUDE_MODEL', 'haiku')
+CLAUDE_TIMEOUT_SECONDS = int(os.environ.get('AIRADIO_CLAUDE_TIMEOUT', '90'))
 LOCK_TTL_SECONDS = int(os.environ.get('AIRADIO_WORKER_LOCK_TTL', '900'))
 
 
@@ -60,6 +64,55 @@ def append_queue(items: list[dict[str, Any]]) -> None:
     queue['items'] = existing[-80:]
     queue['updated_at'] = time.strftime('%Y-%m-%dT%H:%M:%S%z')
     write_json(QUEUE, queue)
+
+
+def normalize_text(text: str) -> str:
+    text = re.sub(r'\s+', '', text or '')
+    text = re.sub(r'[。、,.，．！？!?「」『』（）()【】\[\]…ー-]', '', text)
+    return text.lower()
+
+
+def text_fingerprint(text: str) -> str:
+    normalized = normalize_text(text)
+    return normalized[:140]
+
+
+def load_memory() -> dict[str, Any]:
+    memory = read_json(MEMORY, {'fingerprints': [], 'topics': [], 'recent_texts': []})
+    if not isinstance(memory.get('fingerprints'), list):
+        memory['fingerprints'] = []
+    if not isinstance(memory.get('topics'), list):
+        memory['topics'] = []
+    if not isinstance(memory.get('recent_texts'), list):
+        memory['recent_texts'] = []
+    return memory
+
+
+def remember_segments(items: list[dict[str, Any]]) -> None:
+    memory = load_memory()
+    for item in items:
+        text = str(item.get('text') or '')
+        fp = text_fingerprint(text)
+        if fp:
+            memory['fingerprints'].append(fp)
+        if item.get('title'):
+            memory['topics'].append(str(item.get('title')))
+        memory['recent_texts'].append(text[:500])
+    memory['fingerprints'] = memory['fingerprints'][-240:]
+    memory['topics'] = memory['topics'][-120:]
+    memory['recent_texts'] = memory['recent_texts'][-40:]
+    memory['updated_at'] = time.strftime('%Y-%m-%dT%H:%M:%S%z')
+    write_json(MEMORY, memory)
+
+
+def is_duplicate_text(text: str, memory: dict[str, Any]) -> bool:
+    fp = text_fingerprint(text)
+    if not fp:
+        return True
+    for old in memory.get('fingerprints', [])[-120:]:
+        if fp == old or (len(fp) > 80 and (fp in old or old in fp)):
+            return True
+    return False
 
 
 def pid_is_alive(pid: int) -> bool:
@@ -118,6 +171,47 @@ def run_x_search(theme: str) -> dict[str, Any]:
         return {'ok': False, 'error': str(exc)}
 
 
+def find_claude_bin() -> Optional[str]:
+    configured = os.environ.get('CLAUDE_BIN')
+    if configured and Path(configured).exists():
+        return configured
+    which = shutil.which('claude')
+    if which:
+        return which
+    ext_dir = Path('/home/kojima/.vscode-server/extensions')
+    candidates = sorted(ext_dir.glob('anthropic.claude-code-*/resources/native-binary/claude'), reverse=True)
+    return str(candidates[0]) if candidates else None
+
+
+def claude_json(prompt: str, timeout: int = CLAUDE_TIMEOUT_SECONDS) -> dict[str, Any]:
+    claude_bin = find_claude_bin()
+    if not claude_bin:
+        raise RuntimeError('claude binary not found')
+    cmd = [
+        claude_bin,
+        '-p',
+        '--input-format',
+        'text',
+        '--output-format',
+        'json',
+        '--model',
+        CLAUDE_MODEL,
+    ]
+    proc = subprocess.run(cmd, input=prompt, cwd=str(ROOT), text=True, capture_output=True, timeout=timeout, check=False)
+    if proc.returncode != 0:
+        raise RuntimeError((proc.stderr or proc.stdout)[-1200:])
+    payload = json.loads(proc.stdout)
+    structured = payload.get('structured_output') if isinstance(payload, dict) else None
+    if isinstance(structured, dict):
+        return structured
+    result = payload.get('result') if isinstance(payload, dict) else payload
+    if isinstance(result, dict):
+        return result
+    if isinstance(result, str):
+        return parse_json_object(result)
+    return {}
+
+
 def ollama(prompt: str, timeout: int = 240) -> str:
     payload = {'model': OLLAMA_MODEL, 'prompt': prompt, 'stream': False, 'format': 'json'}
     req = urllib.request.Request(
@@ -149,88 +243,148 @@ def parse_json_object(text: str) -> dict[str, Any]:
 
 
 def fallback_segments(theme: str) -> list[dict[str, Any]]:
+    memory = load_memory()
     base = [
-        f'今夜のテーマは、{theme}です。急がず、ひとつずつ考えていきます。結論を急がず、言葉の輪郭を静かに整えていきましょう。',
-        'AI思考のラジオでは、答えを一気に出すよりも、問いを少しずつ深くしていきます。聞き流していても大丈夫です。大事なところだけ、心に残れば十分です。',
-        'もし眠くなってきたら、そのまま目を閉じてください。話はゆっくり続きます。思考は流れ、必要な言葉だけが残っていきます。',
-        f'{theme}を仕事に活かすなら、最初から大きな成果を狙わなくても大丈夫です。小さな確認、小さな試作、小さな改善を重ねることが、いちばん確かな前進になります。',
-        '裏側では情報を集め、表側では話を止めない。この二つの流れを分けておくと、AIの待ち時間はサービスの沈黙ではなく、次の話題を育てる時間に変わります。',
-        '今日の結論を急ぐ必要はありません。大切なのは、いま聞いた言葉の中から、明日の自分に少し役立つものを一つだけ残しておくことです。',
+        f'xb_bittensorさん、ここからは{theme}を、AIエージェントを実際に動かす人の目線で見ていきます。今日はまず、情報収集、判断、実行の三つを分けて考えます。',
+        'Kurageが話し手として、いま見えている論点をゆっくり整理します。聞き手のxb_bittensorさんは、全部覚えようとしなくて大丈夫です。使えそうな一文だけ拾ってください。',
+        f'{theme}で大切なのは、流行語を追うことではなく、明日の作業が一つ軽くなるかどうかです。小さな自動化を積み重ねると、やがて仕事の流れそのものが変わります。',
+        '次の観点は、ツール選びです。Claude Code、Codex、ローカルLLM、browser-useのような操作エージェントは、それぞれ得意な待ち時間と失敗の仕方が違います。',
+        'AIに仕事を任せるときは、成果物だけではなく、途中のログ、判断理由、やり直し方を残すことが価値になります。これは後から人に渡せる知識になるからです。',
+        'ここまでを一度まとめます。テーマを小さく切り、AIに調べさせ、台本にし、実行し、ログを残す。この循環が、xb_bittensorさん向けのAI思考ラジオの基本形です。',
     ]
-    return [{'id': f'fallback-{int(time.time())}-{i}', 'theme': theme, 'text': text, 'source': 'fallback'} for i, text in enumerate(base)]
+    items = []
+    for i, text in enumerate(base):
+        if is_duplicate_text(text, memory):
+            continue
+        items.append({'id': f'fallback-{int(time.time())}-{i}', 'theme': theme, 'title': f'{theme}の視点 {i + 1}', 'text': text, 'source': 'fallback-curated'})
+    if not items:
+        now = time.strftime('%H時%M分')
+        items.append({
+            'id': f'fallback-{int(time.time())}-fresh',
+            'theme': theme,
+            'title': f'{theme}の新しい切り口',
+            'text': f'{now}の時点で、Kurageは{theme}を別の角度から見直します。今回は、情報収集の精度ではなく、集めた情報をどう行動に変えるかに絞って、xb_bittensorさんに向けて話します。',
+            'source': 'fallback-curated',
+        })
+    remember_segments(items)
+    return items
 
 
 def bridge_segments(theme: str) -> list[dict[str, Any]]:
+    memory = load_memory()
     base = [
-        f'{theme}について考えるとき、まず大切なのは、流行語として追いかけすぎないことです。道具、習慣、仕事の進め方がどう変わるのかを、静かに分けて見ていきます。',
-        '新しい技術は、派手な成功例だけを見ると疲れてしまいます。けれど、毎日の小さな作業を少し楽にする視点で見ると、使いどころが自然に見えてきます。',
-        'ここからは、情報収集で見つかった論点を、いったん生活や仕事の言葉に置き換えていきます。難しい言葉を急いで覚えるより、何に役立つのかをゆっくり確認しましょう。',
-        '今日の話をひとつだけ持ち帰るなら、AIに任せる部分と、人が判断する部分を分けることです。その境目を丁寧に決めるほど、仕事は落ち着いて進みます。',
+        f'xb_bittensorさん、次の資料を待つあいだに、{theme}の判断軸を一つだけ置いておきます。収益化につながるかどうかは、作業時間を減らすか、発信量を増やすかで見るとわかりやすいです。',
+        '少し視点を変えます。AIエージェントの価値は、賢い返答だけではありません。調べる、試す、記録する、次に渡す。この地味な連携が積み上がるところにあります。',
+        'ここでは結論を急ぎません。Kurageは、xb_bittensorさんがあとで実装や発信に使えるように、話題を小さな部品へ分けていきます。',
+        '次の台本を作っている間に、ひとつだけ実践の問いを置きます。このテーマで、今日すぐ自動化できる一手は何か。そこから考えると、話が現実に近づきます。',
     ]
     now = int(time.time())
-    return [
-        {
+    items = []
+    for i, text in enumerate(base):
+        if is_duplicate_text(text, memory):
+            continue
+        items.append({
             'id': f'bridge-{now}-{i}',
             'theme': theme,
             'title': f'{theme}の考え方 {i + 1}',
             'text': text,
             'source': 'bridge',
             'created_at': time.strftime('%Y-%m-%dT%H:%M:%S%z'),
-        }
-        for i, text in enumerate(base)
-    ]
+        })
+    remember_segments(items)
+    return items
 
 
 def build_segments(theme: str, profile: dict[str, Any], research: dict[str, Any]) -> list[dict[str, Any]]:
-    profile_text = json.dumps(profile, ensure_ascii=False)[:1200]
+    memory = load_memory()
+    profile_text = json.dumps(enrich_profile(profile), ensure_ascii=False)[:1800]
     research_text = json.dumps(research, ensure_ascii=False)[:5000]
+    memory_text = json.dumps({
+        'recent_topics': memory.get('topics', [])[-24:],
+        'recent_texts': memory.get('recent_texts', [])[-10:],
+    }, ensure_ascii=False)[:5000]
     prompt = f'''
-あなたは「聴きながらよく寝れる - AI思考のラジオ」の構成作家です。
-Kurage AI VTuberが、眠りを妨げない穏やかな声で話し続けるための短い台本キューを作ってください。
+あなたは「Kurage AI VTuber Radio」のメイン構成作家です。
+Kurageが話し手、xb_bittensorさんが聞き手です。
+xb_bittensorさんのXプロフィールに合うテーマから入り、AI、Bittensor、分散AI、Web3、バイブコーディング、Claude Code/Codex、AI Agent、収益化の文脈を自然に接続してください。
 
 テーマ: {theme}
-ログインユーザ/Xプロフィール: {profile_text}
+聞き手プロフィール: {profile_text}
 情報収集メモ: {research_text}
+直近で話した内容（絶対に繰り返さない）: {memory_text}
 
 要件:
 - 日本語。
-- 1本あたり45〜90秒程度で読める長さ。
-- 強い煽り、断定、怒り、過度なテンションは禁止。
-- 聴き流せるが、内容は薄くしない。
-- kagentreachの情報収集に基づく感じで、具体的な論点、ツール、見方を入れる。
-- 眠りを促すラジオなので、語尾は落ち着かせる。
+- Kurageがxb_bittensorさんへ話しかける口調。
+- 1本あたり60〜120秒程度で読める長さ。
+- 同じ言い回し、同じ結論、同じブリッジトークは禁止。
+- 抽象論だけで終わらせない。具体的なツール、実装、収益化、発信、検証、失敗回避を入れる。
+- 眠りを促すラジオなので穏やか。ただし中身は濃く、薄い一般論にしない。
+- 各segmentは別の角度にする: profile_hook, current_signal, tool_workflow, monetization, implementation_note, closing_question。
+- 「裏側で情報収集しています」「呼吸を整えましょう」のような待ち文句を繰り返さない。
 - JSONだけで返す。shape: {{"segments":[{{"title":"...","text":"...","source":"..."}}]}}
 - segmentsは6個。
 '''.strip()
-    try:
-        response = ollama(prompt)
-        parsed = parse_json_object(response)
-        if not parsed:
-            raise ValueError('Ollama response did not contain a valid JSON object')
-        segs = parsed.get('segments') if isinstance(parsed, dict) else []
-        out = []
-        for i, seg in enumerate(segs[:8]):
-            text = re.sub(r'\s+', ' ', str(seg.get('text') or '')).strip()
-            if len(text) < 40:
-                continue
-            if sum(1 for ch in text if '\u3040' <= ch <= '\u30ff' or '\u4e00' <= ch <= '\u9fff') < 25:
-                continue
-            out.append({
-                'id': f'{int(time.time())}-{i}',
-                'theme': theme,
-                'title': str(seg.get('title') or f'{theme} {i+1}'),
-                'text': text,
-                'source': str(seg.get('source') or 'ollama+kagentreach'),
-                'created_at': time.strftime('%Y-%m-%dT%H:%M:%S%z'),
-            })
-        if len(out) >= 4:
-            return out
-        if out:
-            out.extend(bridge_segments(theme)[: 6 - len(out)])
-            return out
-    except Exception as exc:
-        update_state(research_status='fallback', last_error=str(exc)[-500:])
+    model_errors = []
+    providers = []
+    if os.environ.get('AIRADIO_DISABLE_CLAUDE') != '1':
+        providers.append(('claude', lambda p: claude_json(p)))
+    providers.append(('ollama', lambda p: parse_json_object(ollama(p))))
+    for provider, runner in providers:
+        try:
+            parsed = runner(prompt)
+            out = normalize_segments(parsed, theme, provider, memory)
+            if len(out) >= 4:
+                remember_segments(out)
+                return out
+            if out:
+                out.extend(bridge_segments(theme)[: 6 - len(out)])
+                remember_segments(out)
+                return out
+            model_errors.append(f'{provider}: no valid segments')
+        except Exception as exc:
+            model_errors.append(f'{provider}: {str(exc)[-500:]}')
+            update_state(research_status='fallback', last_error=' | '.join(model_errors)[-1000:])
     return fallback_segments(theme)
+
+
+def enrich_profile(profile: dict[str, Any]) -> dict[str, Any]:
+    enriched = dict(profile or {})
+    username = str(enriched.get('username') or enriched.get('username_from_session') or '')
+    if not username:
+        username = 'xb_bittensor'
+    enriched.setdefault('username', username)
+    if username == 'xb_bittensor' and not enriched.get('description'):
+        enriched['description'] = 'Bittensor、分散AI、AI Agent、Claude Code/Codex、バイブコーディング、Web3収益化に関心がある聞き手。'
+    enriched['listener_role'] = 'xb_bittensor is the listener; Kurage is the speaker.'
+    return enriched
+
+
+def normalize_segments(parsed: dict[str, Any], theme: str, provider: str, memory: dict[str, Any]) -> list[dict[str, Any]]:
+    segs = parsed.get('segments') if isinstance(parsed, dict) else []
+    out = []
+    seen = set()
+    for i, seg in enumerate(segs[:10]):
+        if not isinstance(seg, dict):
+            continue
+        text = re.sub(r'\s+', ' ', str(seg.get('text') or '')).strip()
+        if len(text) < 120:
+            continue
+        if sum(1 for ch in text if '\u3040' <= ch <= '\u30ff' or '\u4e00' <= ch <= '\u9fff') < 60:
+            continue
+        fp = text_fingerprint(text)
+        if fp in seen or is_duplicate_text(text, memory):
+            continue
+        seen.add(fp)
+        out.append({
+            'id': f'{int(time.time())}-{provider}-{i}',
+            'theme': theme,
+            'title': str(seg.get('title') or f'{theme} {i+1}'),
+            'text': text,
+            'source': str(seg.get('source') or provider),
+            'created_at': time.strftime('%Y-%m-%dT%H:%M:%S%z'),
+        })
+    return out
 
 
 def main() -> None:
