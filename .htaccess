@@ -1,0 +1,4 @@
+AddHandler php8.2-script .php
+DirectoryIndex index.php index.html
+RewriteEngine On
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
