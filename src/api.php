@@ -34,8 +34,35 @@ function airadio_post_json($url, $payload, $headers = []) {
     return is_array($data) ? $data : ['raw' => $raw];
 }
 
+function airadio_default_stream_key() {
+    $env = trim((string)getenv('YOUTUBE_STREAM_KEY'));
+    if ($env !== '') { return $env; }
+    $configPath = AIRADIO_KVTUBER_DIR . '/storage/youtube-live.json';
+    if (is_file($configPath)) {
+        $config = json_decode(file_get_contents($configPath), true);
+        if (is_array($config) && !empty($config['streamKey'])) {
+            return trim((string)$config['streamKey']);
+        }
+    }
+    $localPath = AIRADIO_STORAGE_DIR . '/youtube-live.json';
+    if (is_file($localPath)) {
+        $config = json_decode(file_get_contents($localPath), true);
+        if (is_array($config) && !empty($config['streamKey'])) {
+            return trim((string)$config['streamKey']);
+        }
+    }
+    return '';
+}
+
 if ($action === 'status') {
-    ok(['auth' => $auth, 'state' => airadio_state(), 'queue' => airadio_queue(), 'current' => airadio_current_segment()]);
+    ok([
+        'auth' => $auth,
+        'state' => airadio_state(),
+        'queue' => airadio_queue(),
+        'current' => airadio_current_segment(),
+        'comments' => airadio_comments(),
+        'youtube' => ['has_default_stream_key' => airadio_default_stream_key() !== ''],
+    ]);
 }
 
 if ($action === 'profile') {
@@ -43,7 +70,19 @@ if ($action === 'profile') {
 }
 
 if ($action === 'current') {
-    ok(['state' => airadio_state(), 'current' => airadio_current_segment()]);
+    ok(['state' => airadio_state(), 'current' => airadio_current_segment(), 'comments' => airadio_comments()]);
+}
+
+if ($action === 'comments') {
+    ok(['comments' => airadio_comments()]);
+}
+
+if ($action === 'comment') {
+    $text = trim((string)(isset($input['text']) ? $input['text'] : ''));
+    if ($text === '') { bad('comment_required'); }
+    $user = isset($auth['session_user']) ? (string)$auth['session_user'] : '';
+    $item = airadio_add_comment($user, $text, !empty($auth['is_admin']));
+    ok(['comment' => $item, 'comments' => airadio_comments()]);
 }
 
 if ($action === 'start') {
@@ -68,7 +107,7 @@ if ($action === 'start') {
         'id' => 'opening-' . time(),
         'theme' => $theme,
         'title' => 'オープニング',
-        'text' => 'こんばんは。Kurage AI VTuber Radioです。Kurageが話し手、xb_bittensorさんが聞き手です。最初はXプロフィールに合わせて、' . $theme . 'という流れから始めます。短い一般論を繰り返さず、実装、情報収集、収益化、発信の順に、少しずつ深く見ていきます。',
+        'text' => 'こんばんは。Kurage AI VTuber Radioです。KurageがDJとして話し、編集者が学びたいテーマを他のリスナーにも届く形に整えていきます。最初はプロフィールに合わせて、' . $theme . 'という流れから始めます。短い一般論を繰り返さず、実装、情報収集、収益化、発信の順に、少しずつ深く見ていきます。',
         'source' => 'opening',
         'created_at' => date('c'),
     ]];
@@ -119,7 +158,7 @@ if ($action === 'next') {
         $theme = isset($state['theme']) ? $state['theme'] : 'AI思考';
         $bridgeCount = isset($state['bridge_count']) ? ((int)$state['bridge_count'] + 1) : 1;
         $bridgeTexts = [
-            'xb_bittensorさん、次の台本を待つ間に、' . $theme . 'を実装目線で一つだけ分解します。いま見るポイントは、情報収集をどう行動へ変えるかです。',
+            '編集者とリスナーへ、次の台本を待つ間に、' . $theme . 'を実装目線で一つだけ分解します。いま見るポイントは、情報収集をどう行動へ変えるかです。',
             'Kurageから短い補助線です。' . $theme . 'は、ツール名ではなく仕事の流れとして見ると理解しやすくなります。調べる、作る、投稿する、この順番です。',
             'ここでは同じまとめに戻らず、別の角度から見ます。' . $theme . 'で収益化を考えるなら、まず発信量と検証速度を上げる仕組みが必要です。',
             '少しだけ技術側に寄せます。' . $theme . 'を動かすには、LLM、ブラウザ操作、ジョブ管理、ログ保存を分けると、失敗しても立て直しやすくなります。',
@@ -150,6 +189,7 @@ if ($action === 'next') {
 if ($action === 'youtube_start') {
     require_admin($auth);
     $streamKey = trim((string)(isset($input['stream_key']) ? $input['stream_key'] : ''));
+    if ($streamKey === '') { $streamKey = airadio_default_stream_key(); }
     $viewerUrl = trim((string)(isset($input['viewer_url']) ? $input['viewer_url'] : AIRADIO_PUBLIC_BASE_URL));
     $controlBase = rtrim((string)getenv('AIRADIO_KVTUBER_CONTROL_BASE'), '/');
     $adminToken = trim((string)getenv('AIRADIO_KVTUBER_ADMIN_TOKEN'));

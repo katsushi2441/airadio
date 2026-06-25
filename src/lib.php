@@ -38,6 +38,37 @@ function airadio_current_segment() {
     return airadio_read_json(AIRADIO_CURRENT_FILE, ['item' => null, 'updated_at' => '']);
 }
 
+function airadio_comments() {
+    $comments = airadio_read_json(AIRADIO_COMMENTS_FILE, ['items' => []]);
+    $items = isset($comments['items']) && is_array($comments['items']) ? $comments['items'] : [];
+    $comments['items'] = array_slice($items, -80);
+    return $comments;
+}
+
+function airadio_add_comment($user, $text, $is_editor = false) {
+    $text = trim(preg_replace('/\s+/', ' ', (string)$text));
+    if ($text === '') { return null; }
+    if (function_exists('mb_strlen') && mb_strlen($text, 'UTF-8') > 500) {
+        $text = mb_substr($text, 0, 500, 'UTF-8');
+    } elseif (!function_exists('mb_strlen') && strlen($text) > 1500) {
+        $text = substr($text, 0, 1500);
+    }
+    $comments = airadio_comments();
+    $items = isset($comments['items']) && is_array($comments['items']) ? $comments['items'] : [];
+    $item = [
+        'id' => 'comment-' . time() . '-' . substr(sha1($text . microtime(true)), 0, 8),
+        'user' => $is_editor ? '編集者' : ((string)$user !== '' ? (string)$user : 'リスナー'),
+        'role' => $is_editor ? 'editor' : 'listener',
+        'text' => $text,
+        'created_at' => date('c'),
+    ];
+    $items[] = $item;
+    $comments['items'] = array_slice($items, -80);
+    $comments['updated_at'] = date('c');
+    airadio_write_json(AIRADIO_COMMENTS_FILE, $comments);
+    return $item;
+}
+
 function airadio_set_current_segment($item) {
     $current = [
         'item' => $item,
@@ -137,12 +168,12 @@ function airadio_default_theme_from_profile($profile) {
     $username = isset($profile['username']) ? trim((string)$profile['username']) : '';
     $description = isset($profile['description']) ? trim((string)$profile['description']) : '';
     if ($username === 'xb_bittensor' || stripos($description, 'bittensor') !== false || stripos($description, 'Web3xAIxSNS') !== false) {
-        return 'xb_bittensor向けに、Bittensor、分散AI、AI Agent、Claude Code/Codex、バイブコーディング、Web3収益化を静かに深掘りする';
+        return '編集者が学びたい、Bittensor、分散AI、AI Agent、Claude Code/Codex、バイブコーディング、Web3収益化を静かに深掘りする';
     }
     if ($description !== '') {
         return 'Xプロフィールに合わせて、AI活用、発信、収益化、実装のヒントを静かに深掘りする';
     }
-    return 'xb_bittensor向けに、AI Agent、バイブコーディング、分散AI、Web3収益化を静かに深掘りする';
+    return '編集者が学びたい、AI Agent、バイブコーディング、分散AI、Web3収益化を静かに深掘りする';
 }
 
 function airadio_seed_profile_program($theme, $profile) {
@@ -151,7 +182,7 @@ function airadio_seed_profile_program($theme, $profile) {
     $texts = [
         [
             'title' => 'プロフィールから始める',
-            'text' => 'xb_bittensorさん、今夜のKurageは、ただAIニュースを読むのではなく、あなたの関心に合わせて話します。Bittensor、分散AI、AI Agent、Claude CodeやCodex、そしてバイブコーディング。これらは別々の流行語ではなく、個人や小さな会社が、情報収集から実装、発信、収益化までを自分で回すための部品です。最初は、この部品をどうつなぐかから静かに見ていきます。',
+            'text' => '今夜のKurageは、編集者が学びたいテーマを入口に、他のリスナーにも伝わる形で話します。Bittensor、分散AI、AI Agent、Claude CodeやCodex、そしてバイブコーディング。これらは別々の流行語ではなく、個人や小さな会社が、情報収集から実装、発信、収益化までを自分で回すための部品です。最初は、この部品をどうつなぐかから静かに見ていきます。',
             'source' => 'claude-seed-profile',
         ],
         [
@@ -186,7 +217,7 @@ function airadio_seed_profile_program($theme, $profile) {
         ],
         [
             'title' => '次の問い',
-            'text' => '最後に、xb_bittensorさんへ問いを置きます。Bittensor、AI Agent、バイブコーディングを、自分の発信やサービスに組み込むなら、最初に自動化する一手は何でしょうか。調査でしょうか、台本生成でしょうか、動画化でしょうか。Kurageは次の話題で、その一手を小さな実装単位に分けていきます。',
+            'text' => '最後に、編集者とリスナーへ問いを置きます。Bittensor、AI Agent、バイブコーディングを、自分の発信やサービスに組み込むなら、最初に自動化する一手は何でしょうか。調査でしょうか、台本生成でしょうか、動画化でしょうか。Kurageは次の話題で、その一手を小さな実装単位に分けていきます。',
             'source' => 'claude-seed-question',
         ],
     ];

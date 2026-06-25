@@ -245,12 +245,12 @@ def parse_json_object(text: str) -> dict[str, Any]:
 def fallback_segments(theme: str) -> list[dict[str, Any]]:
     memory = load_memory()
     base = [
-        f'xb_bittensorさん、ここからは{theme}を、AIエージェントを実際に動かす人の目線で見ていきます。今日はまず、情報収集、判断、実行の三つを分けて考えます。',
-        'Kurageが話し手として、いま見えている論点をゆっくり整理します。聞き手のxb_bittensorさんは、全部覚えようとしなくて大丈夫です。使えそうな一文だけ拾ってください。',
+        f'ここからは{theme}を、AIエージェントを実際に動かす人の目線で見ていきます。今日はまず、情報収集、判断、実行の三つを分けて考えます。',
+        'KurageがDJとして、いま見えている論点をゆっくり整理します。編集者もリスナーも、全部覚えようとしなくて大丈夫です。使えそうな一文だけ拾ってください。',
         f'{theme}で大切なのは、流行語を追うことではなく、明日の作業が一つ軽くなるかどうかです。小さな自動化を積み重ねると、やがて仕事の流れそのものが変わります。',
         '次の観点は、ツール選びです。Claude Code、Codex、ローカルLLM、browser-useのような操作エージェントは、それぞれ得意な待ち時間と失敗の仕方が違います。',
         'AIに仕事を任せるときは、成果物だけではなく、途中のログ、判断理由、やり直し方を残すことが価値になります。これは後から人に渡せる知識になるからです。',
-        'ここまでを一度まとめます。テーマを小さく切り、AIに調べさせ、台本にし、実行し、ログを残す。この循環が、xb_bittensorさん向けのAI思考ラジオの基本形です。',
+        'ここまでを一度まとめます。テーマを小さく切り、AIに調べさせ、台本にし、実行し、ログを残す。この循環が、編集者向けのAI思考ラジオの基本形です。',
     ]
     items = []
     for i, text in enumerate(base):
@@ -263,7 +263,7 @@ def fallback_segments(theme: str) -> list[dict[str, Any]]:
             'id': f'fallback-{int(time.time())}-fresh',
             'theme': theme,
             'title': f'{theme}の新しい切り口',
-            'text': f'{now}の時点で、Kurageは{theme}を別の角度から見直します。今回は、情報収集の精度ではなく、集めた情報をどう行動に変えるかに絞って、xb_bittensorさんに向けて話します。',
+            'text': f'{now}の時点で、Kurageは{theme}を別の角度から見直します。今回は、情報収集の精度ではなく、集めた情報をどう行動に変えるかに絞って、編集者とリスナーへ話します。',
             'source': 'fallback-curated',
         })
     remember_segments(items)
@@ -273,9 +273,9 @@ def fallback_segments(theme: str) -> list[dict[str, Any]]:
 def bridge_segments(theme: str) -> list[dict[str, Any]]:
     memory = load_memory()
     base = [
-        f'xb_bittensorさん、次の資料を待つあいだに、{theme}の判断軸を一つだけ置いておきます。収益化につながるかどうかは、作業時間を減らすか、発信量を増やすかで見るとわかりやすいです。',
+        f'次の資料を待つあいだに、{theme}の判断軸を一つだけ置いておきます。収益化につながるかどうかは、作業時間を減らすか、発信量を増やすかで見るとわかりやすいです。',
         '少し視点を変えます。AIエージェントの価値は、賢い返答だけではありません。調べる、試す、記録する、次に渡す。この地味な連携が積み上がるところにあります。',
-        'ここでは結論を急ぎません。Kurageは、xb_bittensorさんがあとで実装や発信に使えるように、話題を小さな部品へ分けていきます。',
+        'ここでは結論を急ぎません。Kurageは、編集者があとで実装や発信に使えるように、話題を小さな部品へ分けていきます。',
         '次の台本を作っている間に、ひとつだけ実践の問いを置きます。このテーマで、今日すぐ自動化できる一手は何か。そこから考えると、話が現実に近づきます。',
     ]
     now = int(time.time())
@@ -305,8 +305,8 @@ def build_segments(theme: str, profile: dict[str, Any], research: dict[str, Any]
     }, ensure_ascii=False)[:5000]
     prompt = f'''
 あなたは「Kurage AI VTuber Radio」のメイン構成作家です。
-Kurageが話し手、xb_bittensorさんが聞き手です。
-xb_bittensorさんのXプロフィールに合うテーマから入り、AI、Bittensor、分散AI、Web3、バイブコーディング、Claude Code/Codex、AI Agent、収益化の文脈を自然に接続してください。
+KurageがDJで、編集者は聞き手であり番組を整える人です。ログインした他ユーザーは同じ番組を聞くリスナーです。
+編集者のXプロフィールに合うテーマから入り、AI、Bittensor、分散AI、Web3、バイブコーディング、Claude Code/Codex、AI Agent、収益化の文脈を自然に接続してください。
 
 テーマ: {theme}
 聞き手プロフィール: {profile_text}
@@ -315,7 +315,8 @@ xb_bittensorさんのXプロフィールに合うテーマから入り、AI、Bi
 
 要件:
 - 日本語。
-- Kurageがxb_bittensorさんへ話しかける口調。
+- Kurageが編集者とリスナーへ話しかける口調。
+- 編集者の学びを、他のリスナーにも役立つ解説へ変換する。
 - 1本あたり60〜120秒程度で読める長さ。
 - 同じ言い回し、同じ結論、同じブリッジトークは禁止。
 - 抽象論だけで終わらせない。具体的なツール、実装、収益化、発信、検証、失敗回避を入れる。
@@ -355,8 +356,8 @@ def enrich_profile(profile: dict[str, Any]) -> dict[str, Any]:
         username = 'xb_bittensor'
     enriched.setdefault('username', username)
     if username == 'xb_bittensor' and not enriched.get('description'):
-        enriched['description'] = 'Bittensor、分散AI、AI Agent、Claude Code/Codex、バイブコーディング、Web3収益化に関心がある聞き手。'
-    enriched['listener_role'] = 'xb_bittensor is the listener; Kurage is the speaker.'
+        enriched['description'] = 'Bittensor、分散AI、AI Agent、Claude Code/Codex、バイブコーディング、Web3収益化に関心がある編集者。'
+    enriched['listener_role'] = 'The editor is the listener and curator; Kurage is the DJ and speaker for all listeners.'
     return enriched
 
 

@@ -6,8 +6,9 @@ It combines the Kurage project family into one live radio product:
 - `kvtuber` style PNG VTuber avatar and mouth animation
 - `Kurage AgentReach` style background information gathering
 - loop-engineering inspired foreground/background control loops
-- shared URL2AI/X login for listeners; program profile based on `xb_bittensor`
+- shared URL2AI/X login for listeners; program profile based on the editor account
 - optional YouTube Live / RTMP output through the existing Kurage VTuber tooling
+- YouTube-style listener comments shared by the editor and logged-in listeners
 
 ## Concept
 
@@ -37,16 +38,18 @@ airadio.php?airadio_login=1
 airadio.php?airadio_logout=1
 ```
 
-Any logged-in common-login user can listen. The program content is based on the `xb_bittensor` X profile.
+Any logged-in common-login user can listen. The program content is based on the
+editor account's X profile, but the public UI calls that role `編集者` instead
+of showing the internal account name.
 
 ## Radio Loop
 
 Foreground loop:
 
-1. The broadcaster account (`xb_bittensor`) requests `api.php?action=next`.
+1. The editor/broadcaster account requests `api.php?action=next`.
 2. If a script exists, the server consumes one shared queue item and writes it to `storage/current_segment.json`.
 3. Listener accounts poll `api.php?action=current` and speak the same current script without consuming the queue.
-4. If `xb_bittensor` is not on air, listener accounts stay in standby.
+4. If the editor is not on air, listener accounts stay in standby.
 5. If no script exists, the broadcaster speaks a calm bridge segment immediately.
 6. The avatar mouth switches while speaking.
 
@@ -54,8 +57,14 @@ Background loop:
 
 1. `api.php?action=start` or `api.php?action=interrupt` launches `airadio_worker.py` with `nohup`.
 2. The worker asks Kurage AgentReach/browser-use to search X when available.
-3. The worker asks Ollama `gemma4:12b-it-qat` on `192.168.0.3` to create calm radio scripts.
+3. The worker asks Claude when available, then Ollama `gemma4:12b-it-qat` on `192.168.0.3`, to create calm but substantive radio scripts.
 4. New segments are appended to `storage/script_queue.json`.
+
+Comment loop:
+
+1. Any logged-in user can post a short comment through `api.php?action=comment`.
+2. Admin/editor comments are displayed as `編集者`; other logged-in users are displayed as listener comments.
+3. Comments are stored in `storage/comments.json` and returned with `status`/`current` polling.
 
 ## Theme Interrupt
 
@@ -79,6 +88,10 @@ The UI supports 1 to 6 hour sessions in 1 hour increments.
 
 This keeps YouTube Live implementation in the Kurage VTuber layer and lets
 AIRadio focus on the radio loop.
+
+The stream key is not committed. AIRadio accepts a manual key from the UI, or
+uses `YOUTUBE_STREAM_KEY`, `kvtuber/storage/youtube-live.json`, or
+`airadio/storage/youtube-live.json` at runtime if one is already saved.
 
 ## Development
 
