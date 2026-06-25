@@ -19,6 +19,28 @@ The VTuber keeps speaking in the foreground while research and script generation
 continue in the background. If the script queue runs dry, the foreground loop
 uses quiet bridge talk and triggers another background research job.
 
+Kurage AI VTuber Radio is also a content-production system for the sleep and
+learning video niche. Sleep-friendly long-form videos often grow because they
+earn long watch time, can be reused as background media, and do not require a
+traditional face-on-camera performer. AIRadio turns that pattern into a live AI
+VTuber workflow:
+
+1. Kurage speaks continuously as a calm DJ.
+2. The editor chooses what they want to learn.
+3. Kurage AgentReach collects signals in the background.
+4. The script queue is refilled while the foreground radio keeps speaking.
+5. The same session can be streamed to YouTube Live and recorded as a long-form
+   sleep-learning video asset.
+
+In short, the product is not only "a radio that talks." It is:
+
+> A sleep-friendly AI VTuber radio that can create reusable learning videos
+> while it is being live-streamed.
+
+This is why the editor role matters. The editor is not just a listener; the
+editor curates the learning direction for other listeners. Kurage turns that
+editorial intent into a calm, continuous program.
+
 ## Current MVP
 
 - `src/airadio.php`: white, URL2AI-like radio UI
