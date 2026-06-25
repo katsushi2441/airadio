@@ -7,6 +7,7 @@ $allowed = !empty($auth['allowed']);
 $loginUrl = isset($auth['login_url']) ? $auth['login_url'] : '?demo_login=xb_bittensor';
 $logoutUrl = isset($auth['logout_url']) ? $auth['logout_url'] : '?demo_logout=1';
 $sessionUser = isset($auth['session_user']) ? $auth['session_user'] : '';
+$isAdmin = !empty($auth['is_admin']);
 ?>
 <!doctype html>
 <html lang="ja">
@@ -29,9 +30,14 @@ $sessionUser = isset($auth['session_user']) ? $auth['session_user'] : '';
     <div class="card">
       <div class="brand"><div><span class="tag">聴きながらよく寝れる</span><h1>Kurage AI<br>VTuber Radio</h1></div><a class="btn secondary" href="<?= htmlspecialchars($logoutUrl) ?>">logout @<?= htmlspecialchars($sessionUser) ?></a></div>
       <p class="lead">Kurageが話し手、@xb_bittensor が聞き手です。Kurage AgentReachで情報収集しながら、Xプロフィールに沿ったAI、Bittensor、バイブコーディング、Web3収益化の話題をラジオのように話し続けます。</p>
+      <?php if ($isAdmin): ?>
       <div class="controls"><textarea id="theme" placeholder="割り込ませたいテーマがあれば入力。空白のまま開始すると、@xb_bittensor のXプロフィールからテーマを作ります。"></textarea><select id="hours"><option value="1">1時間</option><option value="2">2時間</option><option value="3">3時間</option><option value="4">4時間</option><option value="5">5時間</option><option value="6">6時間</option></select></div>
       <div class="buttons"><button class="btn live" id="startBtn">ラジオ開始</button><button class="btn secondary" id="interruptBtn">テーマ割り込み</button><button class="btn secondary" id="stopBtn">停止</button></div>
       <div class="liveControls"><input id="streamKey" type="password" placeholder="YouTube Live ストリームキー"><button class="btn secondary" id="youtubeStartBtn">YouTube配信</button><button class="btn secondary" id="youtubeStopBtn">配信停止</button></div>
+      <?php else: ?>
+      <div class="buttons"><button class="btn live" id="listenBtn">視聴開始</button></div>
+      <div class="sleepNote">この画面は視聴専用です。@xb_bittensor が配信開始している間、同じ現在台本を取得して読み上げます。配信していないときは待機中になります。</div>
+      <?php endif; ?>
       <div class="sleepNote">眠るためのラジオなので、声は穏やかに、話題は深く、テンポはゆっくり。Kurage AgentReachの情報収集が遅くても、表の話は止めません。</div>
     </div>
     <div class="card avatarStage"><div class="orb one"></div><div class="orb two"></div><div class="status"><div class="small">ON AIR STATUS</div><div class="now" id="nowTalking">待機中</div><div class="small" id="researchStatus">research: idle</div><div class="meter"><span id="meter"></span></div></div><img id="avatar" class="avatar" src="assets/kurage_radio_idle.png" alt="Kurage AI VTuber"></div>
@@ -39,6 +45,7 @@ $sessionUser = isset($auth['session_user']) ? $auth['session_user'] : '';
   <section class="grid"><div class="card"><h2>次に話す内容</h2><div id="currentText" class="log"></div></div><div class="card"><h2>Loop Log</h2><div id="loopLog" class="log"></div></div></section>
 </main>
 <script>
+const IS_ADMIN = <?= $isAdmin ? 'true' : 'false' ?>;
 const api = (action, body) => fetch(`api.php?action=${action}`, {method: body ? 'POST':'GET', headers:{'Content-Type':'application/json'}, body: body ? JSON.stringify(body): undefined}).then(r=>r.json());
 const avatar = document.getElementById('avatar');
 const nowTalking = document.getElementById('nowTalking');
@@ -46,7 +53,7 @@ const currentText = document.getElementById('currentText');
 const loopLog = document.getElementById('loopLog');
 const researchStatus = document.getElementById('researchStatus');
 const meter = document.getElementById('meter');
-let running = false; let endsAt = 0; let speaking = false;
+let running = false; let endsAt = 0; let speaking = false; let lastCurrentId = '';
 const bridgeTexts = ['少しだけ、静かな間を置きます。考えは急がなくて大丈夫です。','裏側で情報を集めています。こちらでは、今のテーマをゆっくりほどいていきます。'];
 function log(msg){ const el=document.createElement('div'); el.className='segment'; el.textContent=new Date().toLocaleTimeString()+'  '+msg; loopLog.prepend(el); }
 function setMouth(on){ avatar.src = on ? 'assets/kurage_radio_talk.png' : 'assets/kurage_radio_idle.png'; avatar.classList.toggle('talking', on); meter.style.width = on ? '78%' : '18%'; }
@@ -69,13 +76,39 @@ async function radioLoop(){
   }
   running=false; nowTalking.textContent='終了しました'; setMouth(false);
 }
-async function refresh(){ try{ const d=await api('status'); const s=d.state||{}; researchStatus.textContent=`research: ${s.research_status||'idle'} / queue: ${(d.queue?.items||[]).length}`; }catch(e){} }
+async function listenerLoop(){
+  while(running){
+    let d; try { d = await api('current'); } catch(e) { d = null; }
+    const s = d?.state || {};
+    const item = d?.current?.item || null;
+    if (s.status !== 'on_air') {
+      nowTalking.textContent='待機中';
+      currentText.textContent='@xb_bittensor が配信開始すると、ここで同じ台本を聴けます。';
+      await new Promise(r=>setTimeout(r, 3000));
+      continue;
+    }
+    if (item && item.id && item.id !== lastCurrentId) {
+      lastCurrentId = item.id;
+      log(`listen: ${item.title||''}`);
+      await speakText(item.text || bridgeTexts[0], item.title || 'Kurage Radio');
+    } else {
+      nowTalking.textContent=item?.title ? '配信中: '+item.title : '配信中';
+      await new Promise(r=>setTimeout(r, 2000));
+    }
+  }
+  setMouth(false);
+}
+async function refresh(){ try{ const d=await api('status'); const s=d.state||{}; const q=(d.queue?.items||[]).length; const current=d.current?.item; researchStatus.textContent=`research: ${s.research_status||'idle'} / queue: ${q} / ${s.status||'idle'}`; if(!running && current?.title){ nowTalking.textContent=current.title; currentText.textContent=current.text||''; } }catch(e){} }
 setInterval(refresh, 4000); refresh();
-document.getElementById('startBtn').onclick=async()=>{ const theme=document.getElementById('theme').value.trim(); const hours=Number(document.getElementById('hours').value||1); const d=await api('start',{theme,duration_hours:hours}); endsAt = Date.now()+hours*3600*1000; running=true; log('radio started'); radioLoop(); };
-document.getElementById('interruptBtn').onclick=async()=>{ const theme=document.getElementById('theme').value.trim(); if(!theme){ log('割り込みテーマを入力してください'); return; } await api('interrupt',{theme}); log('theme interrupted: '+theme); };
-document.getElementById('stopBtn').onclick=async()=>{ running=false; speechSynthesis.cancel(); await api('stop'); log('stopped'); nowTalking.textContent='停止中'; setMouth(false); };
-document.getElementById('youtubeStartBtn').onclick=async()=>{ const stream_key=document.getElementById('streamKey').value.trim(); if(!stream_key){ log('YouTube Live ストリームキーを入力してください'); return; } const d=await api('youtube_start',{stream_key,viewer_url:location.href.split('#')[0]}); log(d.ok?'YouTube配信を開始しました':'YouTube配信開始に失敗しました'); };
-document.getElementById('youtubeStopBtn').onclick=async()=>{ const d=await api('youtube_stop',{}); log(d.ok?'YouTube配信を停止しました':'YouTube配信停止に失敗しました'); };
+if (IS_ADMIN) {
+  document.getElementById('startBtn').onclick=async()=>{ const theme=document.getElementById('theme').value.trim(); const hours=Number(document.getElementById('hours').value||1); const d=await api('start',{theme,duration_hours:hours}); endsAt = Date.now()+hours*3600*1000; running=true; log('radio started'); radioLoop(); };
+  document.getElementById('interruptBtn').onclick=async()=>{ const theme=document.getElementById('theme').value.trim(); if(!theme){ log('割り込みテーマを入力してください'); return; } await api('interrupt',{theme}); log('theme interrupted: '+theme); };
+  document.getElementById('stopBtn').onclick=async()=>{ running=false; speechSynthesis.cancel(); await api('stop'); log('stopped'); nowTalking.textContent='停止中'; setMouth(false); };
+  document.getElementById('youtubeStartBtn').onclick=async()=>{ const stream_key=document.getElementById('streamKey').value.trim(); if(!stream_key){ log('YouTube Live ストリームキーを入力してください'); return; } const d=await api('youtube_start',{stream_key,viewer_url:location.href.split('#')[0]}); log(d.ok?'YouTube配信を開始しました':'YouTube配信開始に失敗しました'); };
+  document.getElementById('youtubeStopBtn').onclick=async()=>{ const d=await api('youtube_stop',{}); log(d.ok?'YouTube配信を停止しました':'YouTube配信停止に失敗しました'); };
+} else {
+  document.getElementById('listenBtn').onclick=async()=>{ running=true; log('listening started'); listenerLoop(); };
+}
 </script>
 <?php endif; ?>
 </body>

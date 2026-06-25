@@ -14,6 +14,10 @@ if (!is_array($input)) { $input = []; }
 function ok($data = []) { echo json_encode(array_merge(['ok' => true], $data), JSON_UNESCAPED_UNICODE); exit; }
 function bad($error, $code = 400, $data = []) { http_response_code($code); echo json_encode(array_merge(['ok' => false, 'error' => $error], $data), JSON_UNESCAPED_UNICODE); exit; }
 
+function require_admin($auth) {
+    if (empty($auth['is_admin'])) { bad('admin_required', 403); }
+}
+
 function airadio_post_json($url, $payload, $headers = []) {
     $body = json_encode($payload, JSON_UNESCAPED_UNICODE);
     $headerLines = ["Content-Type: application/json"];
@@ -31,14 +35,19 @@ function airadio_post_json($url, $payload, $headers = []) {
 }
 
 if ($action === 'status') {
-    ok(['auth' => $auth, 'state' => airadio_state(), 'queue' => airadio_queue()]);
+    ok(['auth' => $auth, 'state' => airadio_state(), 'queue' => airadio_queue(), 'current' => airadio_current_segment()]);
 }
 
 if ($action === 'profile') {
     ok(['profile' => airadio_profile_from_session()]);
 }
 
+if ($action === 'current') {
+    ok(['state' => airadio_state(), 'current' => airadio_current_segment()]);
+}
+
 if ($action === 'start') {
+    require_admin($auth);
     $theme = trim((string)(isset($input['theme']) ? $input['theme'] : ''));
     $profile = airadio_profile_from_session();
     if ($theme === '') { $theme = airadio_default_theme_from_profile($profile); }
@@ -53,6 +62,7 @@ if ($action === 'start') {
         'ends_at' => date('c', $now + $hours * 3600),
         'loop_state' => 'speaking',
         'research_status' => 'queued',
+        'broadcaster' => isset($auth['session_user']) ? $auth['session_user'] : AIRADIO_ALLOWED_USER,
     ]);
     $items = [[
         'id' => 'opening-' . time(),
@@ -70,11 +80,14 @@ if ($action === 'start') {
 }
 
 if ($action === 'stop') {
+    require_admin($auth);
+    airadio_clear_current_segment();
     $state = airadio_update_state(['status' => 'idle', 'loop_state' => 'stopped', 'now_talking' => '', 'research_status' => 'idle']);
     ok(['state' => $state]);
 }
 
 if ($action === 'interrupt') {
+    require_admin($auth);
     $theme = trim((string)(isset($input['theme']) ? $input['theme'] : ''));
     if ($theme === '') { bad('theme_required'); }
     $queue = airadio_queue();
@@ -93,7 +106,11 @@ if ($action === 'interrupt') {
 }
 
 if ($action === 'next') {
+    require_admin($auth);
     $state = airadio_state();
+    if (isset($state['status']) && $state['status'] !== 'on_air') {
+        bad('radio_not_on_air', 409, ['state' => $state, 'current' => airadio_current_segment()]);
+    }
     $queue = airadio_queue();
     $items = isset($queue['items']) ? $queue['items'] : [];
     if (!is_array($items)) { $items = []; }
@@ -125,11 +142,13 @@ if ($action === 'next') {
     airadio_write_json(AIRADIO_QUEUE_FILE, $queue);
     $patch = ['now_talking' => isset($item['title']) ? $item['title'] : '', 'loop_state' => 'speaking'];
     if (isset($bridgeCount)) { $patch['bridge_count'] = $bridgeCount; }
+    $current = airadio_set_current_segment($item);
     airadio_update_state($patch);
-    ok(['item' => $item, 'queue_remaining' => count($items), 'state' => airadio_state()]);
+    ok(['item' => $item, 'current' => $current, 'queue_remaining' => count($items), 'state' => airadio_state()]);
 }
 
 if ($action === 'youtube_start') {
+    require_admin($auth);
     $streamKey = trim((string)(isset($input['stream_key']) ? $input['stream_key'] : ''));
     $viewerUrl = trim((string)(isset($input['viewer_url']) ? $input['viewer_url'] : AIRADIO_PUBLIC_BASE_URL));
     $controlBase = rtrim((string)getenv('AIRADIO_KVTUBER_CONTROL_BASE'), '/');
@@ -170,6 +189,7 @@ if ($action === 'youtube_start') {
 }
 
 if ($action === 'youtube_stop') {
+    require_admin($auth);
     $controlBase = rtrim((string)getenv('AIRADIO_KVTUBER_CONTROL_BASE'), '/');
     $adminToken = trim((string)getenv('AIRADIO_KVTUBER_ADMIN_TOKEN'));
     if ($controlBase !== '') {

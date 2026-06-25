@@ -34,8 +34,26 @@ function airadio_queue() {
     return airadio_read_json(AIRADIO_QUEUE_FILE, ['items' => []]);
 }
 
+function airadio_current_segment() {
+    return airadio_read_json(AIRADIO_CURRENT_FILE, ['item' => null, 'updated_at' => '']);
+}
+
+function airadio_set_current_segment($item) {
+    $current = [
+        'item' => $item,
+        'updated_at' => date('c'),
+    ];
+    airadio_write_json(AIRADIO_CURRENT_FILE, $current);
+    return $current;
+}
+
+function airadio_clear_current_segment() {
+    airadio_write_json(AIRADIO_CURRENT_FILE, ['item' => null, 'updated_at' => date('c')]);
+}
+
 function airadio_reset_program_memory() {
     airadio_write_json(AIRADIO_QUEUE_FILE, ['items' => [], 'updated_at' => date('c')]);
+    airadio_clear_current_segment();
     airadio_write_json(AIRADIO_MEMORY_FILE, [
         'fingerprints' => [],
         'topics' => [],

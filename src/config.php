@@ -4,6 +4,7 @@ const AIRADIO_ALLOWED_USER = 'xb_bittensor';
 const AIRADIO_STORAGE_DIR = __DIR__ . '/../storage';
 const AIRADIO_STATE_FILE = AIRADIO_STORAGE_DIR . '/radio_state.json';
 const AIRADIO_QUEUE_FILE = AIRADIO_STORAGE_DIR . '/script_queue.json';
+const AIRADIO_CURRENT_FILE = AIRADIO_STORAGE_DIR . '/current_segment.json';
 const AIRADIO_LOG_FILE = AIRADIO_STORAGE_DIR . '/radio_loop.log';
 const AIRADIO_WORKER_LOCK = AIRADIO_STORAGE_DIR . '/worker.lock';
 const AIRADIO_MEMORY_FILE = AIRADIO_STORAGE_DIR . '/talk_memory.json';

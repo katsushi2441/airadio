@@ -43,10 +43,12 @@ Any logged-in common-login user can listen. The program content is based on the 
 
 Foreground loop:
 
-1. Browser requests `api.php?action=next`.
-2. If a script exists, Kurage speaks it using browser speech synthesis.
-3. If no script exists, Kurage speaks a calm bridge segment immediately.
-4. The avatar mouth switches while speaking.
+1. The broadcaster account (`xb_bittensor`) requests `api.php?action=next`.
+2. If a script exists, the server consumes one shared queue item and writes it to `storage/current_segment.json`.
+3. Listener accounts poll `api.php?action=current` and speak the same current script without consuming the queue.
+4. If `xb_bittensor` is not on air, listener accounts stay in standby.
+5. If no script exists, the broadcaster speaks a calm bridge segment immediately.
+6. The avatar mouth switches while speaking.
 
 Background loop:
 
@@ -57,7 +59,7 @@ Background loop:
 
 ## Theme Interrupt
 
-The logged-in user can type a theme such as:
+The broadcaster account can type a theme such as:
 
 ```text
 バイブコーディングをテーマにして
