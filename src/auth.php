@@ -2,10 +2,26 @@
 require_once __DIR__ . '/config.php';
 
 function airadio_load_url2ai_auth() {
-    $path = '/home/kojima/work/url2ai/src/auth_common.php';
-    if (file_exists($path)) {
+    $candidates = [
+        getenv('AIRADIO_AUTH_COMMON') ?: '',
+        __DIR__ . '/auth_common.php',
+        dirname(__DIR__) . '/auth_common.php',
+        '/home/kojima/work/url2ai/src/auth_common.php',
+        '/home/users/0/exbridge/web/aiknowledgecms_exbridge_jp/auth_common.php',
+        '/web/aiknowledgecms_exbridge_jp/auth_common.php',
+        '../aiknowledgecms_exbridge_jp/auth_common.php',
+    ];
+    foreach ($candidates as $path) {
+        if ($path !== '' && file_exists($path)) {
+            require_once $path;
+            return function_exists('url2ai_auth_bootstrap');
+        }
+    }
+    foreach (glob(dirname(__DIR__) . '/../*/auth_common.php') ?: [] as $path) {
         require_once $path;
-        return function_exists('url2ai_auth_bootstrap');
+        if (function_exists('url2ai_auth_bootstrap')) {
+            return true;
+        }
     }
     return false;
 }
