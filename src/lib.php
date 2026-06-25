@@ -56,24 +56,61 @@ function airadio_append_log($message, $data = []) {
 }
 
 function airadio_profile_from_session() {
-    $profile = ['username' => '', 'name' => '', 'description' => '', 'source' => 'session'];
+    $profile = airadio_fetch_x_profile(AIRADIO_ALLOWED_USER);
     if (session_status() !== PHP_SESSION_ACTIVE) { @session_start(); }
-    $profile['username'] = isset($_SESSION['session_username']) ? $_SESSION['session_username'] : '';
-    $token = isset($_SESSION['session_access_token']) ? $_SESSION['session_access_token'] : '';
-    if ($token !== '') {
-        $url = 'https://api.twitter.com/2/users/me?user.fields=description,profile_image_url,public_metrics,verified';
-        $ctx = stream_context_create(['http' => [
+    $profile['listener_username'] = AIRADIO_ALLOWED_USER;
+    $profile['logged_in_user'] = isset($_SESSION['session_username']) ? $_SESSION['session_username'] : '';
+    return $profile;
+}
+
+function airadio_fetch_x_profile($username) {
+    $username = preg_replace('/[^A-Za-z0-9_]/', '', (string)$username);
+    if ($username === '') { $username = AIRADIO_ALLOWED_USER; }
+    $cache_file = AIRADIO_STORAGE_DIR . '/x_profile_' . $username . '.json';
+    $cached = airadio_read_json($cache_file, []);
+    if (!empty($cached['username']) && !empty($cached['description']) && isset($cached['cached_at']) && time() - (int)$cached['cached_at'] < 3600) {
+        $cached['source'] = isset($cached['source']) ? $cached['source'] : 'fxtwitter_cache';
+        return $cached;
+    }
+    $profile = [
+        'username' => $username,
+        'name' => $username,
+        'description' => '',
+        'source' => 'fxtwitter',
+    ];
+    $url = 'https://api.fxtwitter.com/' . rawurlencode($username);
+    $ctx = stream_context_create(['http' => [
             'method' => 'GET',
-            'header' => "Authorization: Bearer $token\r\nUser-Agent: KurageAIRadio/0.1\r\n",
-            'timeout' => 8,
+            'header' => "User-Agent: KurageAIRadio/0.1\r\nAccept: application/json\r\n",
+            'timeout' => 12,
             'ignore_errors' => true,
-        ]]);
-        $raw = @file_get_contents($url, false, $ctx);
-        $json = json_decode($raw ?: '{}', true);
-        if (!empty($json['data'])) {
-            $profile = array_merge($profile, $json['data']);
-            $profile['source'] = 'x_api';
+    ]]);
+    $raw = @file_get_contents($url, false, $ctx);
+    $json = json_decode($raw ? $raw : '{}', true);
+    $user = isset($json['user']) && is_array($json['user']) ? $json['user'] : [];
+    if (!empty($user)) {
+        $description = '';
+        if (isset($user['raw_description']['text'])) {
+            $description = (string)$user['raw_description']['text'];
+        } elseif (isset($user['description'])) {
+            $description = (string)$user['description'];
         }
+        $profile = [
+            'username' => isset($user['screen_name']) ? (string)$user['screen_name'] : $username,
+            'name' => isset($user['name']) ? (string)$user['name'] : $username,
+            'description' => $description,
+            'followers' => isset($user['followers']) ? (int)$user['followers'] : 0,
+            'following' => isset($user['following']) ? (int)$user['following'] : 0,
+            'tweets' => isset($user['tweets']) ? (int)$user['tweets'] : 0,
+            'likes' => isset($user['likes']) ? (int)$user['likes'] : 0,
+            'url' => isset($user['url']) ? (string)$user['url'] : 'https://x.com/' . $username,
+            'source' => 'fxtwitter',
+            'cached_at' => time(),
+        ];
+        airadio_write_json($cache_file, $profile);
+    } elseif (!empty($cached)) {
+        $cached['source'] = 'fxtwitter_cache_stale';
+        return $cached;
     }
     return $profile;
 }
@@ -81,7 +118,7 @@ function airadio_profile_from_session() {
 function airadio_default_theme_from_profile($profile) {
     $username = isset($profile['username']) ? trim((string)$profile['username']) : '';
     $description = isset($profile['description']) ? trim((string)$profile['description']) : '';
-    if ($username === 'xb_bittensor' || stripos($description, 'bittensor') !== false) {
+    if ($username === 'xb_bittensor' || stripos($description, 'bittensor') !== false || stripos($description, 'Web3xAIxSNS') !== false) {
         return 'xb_bittensor向けに、Bittensor、分散AI、AI Agent、Claude Code/Codex、バイブコーディング、Web3収益化を静かに深掘りする';
     }
     if ($description !== '') {
@@ -120,8 +157,8 @@ function airadio_seed_profile_program($theme, $profile) {
             'source' => 'claude-seed-monetization',
         ],
         [
-            'title' => 'kagentreach的な情報収集',
-            'text' => '情報収集では、ただ検索結果を並べても価値になりません。Kurageが見るべきなのは、誰が何に反応しているか、どの切り口が伸びているか、そこから自分のプロダクトにどう接続できるかです。kagentreachのような収集系は、話題を拾う入口であり、台本や実装タスクへ変換して初めて仕事になります。',
+            'title' => 'Kurage AgentReachによる情報収集',
+            'text' => '情報収集では、ただ検索結果を並べても価値になりません。Kurageが見るべきなのは、誰が何に反応しているか、どの切り口が伸びているか、そこから自分のプロダクトにどう接続できるかです。Kurage AgentReachは、話題を拾う入口であり、台本や実装タスクへ変換して初めて仕事になります。',
             'source' => 'claude-seed-research',
         ],
         [

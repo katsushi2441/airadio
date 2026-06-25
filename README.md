@@ -4,9 +4,9 @@ Kurage AI VTuber Radio is a sleep-friendly AI thinking radio system.
 It combines the Kurage project family into one live radio product:
 
 - `kvtuber` style PNG VTuber avatar and mouth animation
-- `kagentreach` style background information gathering
+- `Kurage AgentReach` style background information gathering
 - loop-engineering inspired foreground/background control loops
-- shared URL2AI/X login, initially restricted to `xb_bittensor`
+- shared URL2AI/X login for listeners; program profile based on `xb_bittensor`
 - optional YouTube Live / RTMP output through the existing Kurage VTuber tooling
 
 ## Concept
@@ -22,7 +22,7 @@ uses quiet bridge talk and triggers another background research job.
 
 - `src/airadio.php`: white, URL2AI-like radio UI
 - `src/api.php`: control API for start/stop/theme interrupt/next segment/YouTube Live hooks
-- `src/airadio_worker.py`: background kagentreach/Ollama script refill worker
+- `src/airadio_worker.py`: background Kurage AgentReach/Ollama script refill worker
 - `src/assets/kurage_radio_idle.png`: Kurage bishoujo idle avatar
 - `src/assets/kurage_radio_talk.png`: Kurage bishoujo talking avatar
 
@@ -34,7 +34,7 @@ The app uses URL2AI common login when available:
 /home/kojima/work/url2ai/src/auth_common.php
 ```
 
-Only `xb_bittensor` is allowed in the first version.
+Any logged-in common-login user can listen. The program content is based on the `xb_bittensor` X profile.
 
 ## Radio Loop
 
@@ -48,7 +48,7 @@ Foreground loop:
 Background loop:
 
 1. `api.php?action=start` or `api.php?action=interrupt` launches `airadio_worker.py` with `nohup`.
-2. The worker asks kagentreach/browser-use to search X when available.
+2. The worker asks Kurage AgentReach/browser-use to search X when available.
 3. The worker asks Ollama `gemma4:12b-it-qat` on `192.168.0.3` to create calm radio scripts.
 4. New segments are appended to `storage/script_queue.json`.
 

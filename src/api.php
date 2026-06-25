@@ -14,6 +14,22 @@ if (!is_array($input)) { $input = []; }
 function ok($data = []) { echo json_encode(array_merge(['ok' => true], $data), JSON_UNESCAPED_UNICODE); exit; }
 function bad($error, $code = 400, $data = []) { http_response_code($code); echo json_encode(array_merge(['ok' => false, 'error' => $error], $data), JSON_UNESCAPED_UNICODE); exit; }
 
+function airadio_post_json($url, $payload, $headers = []) {
+    $body = json_encode($payload, JSON_UNESCAPED_UNICODE);
+    $headerLines = ["Content-Type: application/json"];
+    foreach ($headers as $key => $value) { $headerLines[] = $key . ': ' . $value; }
+    $ctx = stream_context_create(['http' => [
+        'method' => 'POST',
+        'header' => implode("\r\n", $headerLines) . "\r\n",
+        'content' => $body,
+        'timeout' => 30,
+        'ignore_errors' => true,
+    ]]);
+    $raw = @file_get_contents($url, false, $ctx);
+    $data = json_decode($raw ? $raw : '{}', true);
+    return is_array($data) ? $data : ['raw' => $raw];
+}
+
 if ($action === 'status') {
     ok(['auth' => $auth, 'state' => airadio_state(), 'queue' => airadio_queue()]);
 }
@@ -116,7 +132,31 @@ if ($action === 'next') {
 if ($action === 'youtube_start') {
     $streamKey = trim((string)(isset($input['stream_key']) ? $input['stream_key'] : ''));
     $viewerUrl = trim((string)(isset($input['viewer_url']) ? $input['viewer_url'] : AIRADIO_PUBLIC_BASE_URL));
+    $controlBase = rtrim((string)getenv('AIRADIO_KVTUBER_CONTROL_BASE'), '/');
+    $adminToken = trim((string)getenv('AIRADIO_KVTUBER_ADMIN_TOKEN'));
+    if ($controlBase !== '') {
+        if ($adminToken === '') { bad('kvtuber_admin_token_not_configured', 500); }
+        $headers = ['X-Admin-Token' => $adminToken];
+        $configResult = airadio_post_json($controlBase . '/control/youtube-live', [
+            'streamKey' => $streamKey,
+            'viewerUrl' => $viewerUrl,
+        ], $headers);
+        if (empty($configResult['ok']) && empty($configResult['config'])) {
+            bad('kvtuber_youtube_config_failed', 502, ['result' => $configResult]);
+        }
+        $startResult = airadio_post_json($controlBase . '/control/youtube-live/start', [], $headers);
+        if (empty($startResult['ok']) && empty($startResult['status']) && empty($startResult['pid'])) {
+            bad('kvtuber_youtube_start_failed', 502, ['result' => $startResult]);
+        }
+        ok(['mode' => 'kvtuber-control-api', 'viewer_url' => $viewerUrl, 'result' => $startResult]);
+    }
     $configPath = AIRADIO_KVTUBER_DIR . '/storage/youtube-live.json';
+    $scriptPath = AIRADIO_KVTUBER_DIR . '/scripts/youtube-live-rtmp.mjs';
+    if (!is_file($scriptPath)) {
+        bad('youtube_live_not_configured', 500, [
+            'hint' => 'Set AIRADIO_KVTUBER_CONTROL_BASE/AIRADIO_KVTUBER_ADMIN_TOKEN or deploy kvtuber on the same host.',
+        ]);
+    }
     $config = file_exists($configPath) ? json_decode(file_get_contents($configPath), true) : [];
     if (!is_array($config)) { $config = []; }
     $config['viewerUrl'] = $viewerUrl;
@@ -130,6 +170,16 @@ if ($action === 'youtube_start') {
 }
 
 if ($action === 'youtube_stop') {
+    $controlBase = rtrim((string)getenv('AIRADIO_KVTUBER_CONTROL_BASE'), '/');
+    $adminToken = trim((string)getenv('AIRADIO_KVTUBER_ADMIN_TOKEN'));
+    if ($controlBase !== '') {
+        if ($adminToken === '') { bad('kvtuber_admin_token_not_configured', 500); }
+        $result = airadio_post_json($controlBase . '/control/youtube-live/stop', [], ['X-Admin-Token' => $adminToken]);
+        ok(['mode' => 'kvtuber-control-api', 'result' => $result]);
+    }
+    if (!is_file(AIRADIO_KVTUBER_DIR . '/scripts/youtube-live-rtmp.mjs')) {
+        bad('youtube_live_not_configured', 500);
+    }
     $cmd = 'cd ' . escapeshellarg(AIRADIO_KVTUBER_DIR) . ' && node scripts/youtube-live-rtmp.mjs stop 2>&1';
     $out = shell_exec($cmd);
     ok(['output' => $out]);

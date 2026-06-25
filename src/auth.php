@@ -33,15 +33,14 @@ function airadio_auth() {
             'logged_in' => $user !== '',
             'session_user' => $user,
             'is_admin' => $user === AIRADIO_ALLOWED_USER,
-            'allowed' => $user === AIRADIO_ALLOWED_USER,
+            'allowed' => $user !== '',
             'login_url' => '?demo_login=' . AIRADIO_ALLOWED_USER,
             'logout_url' => '?demo_logout=1',
         ];
     }
     if (airadio_load_url2ai_auth()) {
         $auth = url2ai_auth_bootstrap();
-        $sessionUser = isset($auth['session_user']) ? $auth['session_user'] : '';
-        $auth['allowed'] = !empty($auth['logged_in']) && $sessionUser === AIRADIO_ALLOWED_USER;
+        $auth['allowed'] = !empty($auth['logged_in']);
         $auth['login_url'] = airadio_common_login_url();
         $auth['logout_url'] = airadio_common_logout_url();
         return $auth;
@@ -52,7 +51,7 @@ function airadio_auth() {
         'logged_in' => $user !== '',
         'session_user' => $user,
         'is_admin' => $user === AIRADIO_ALLOWED_USER,
-        'allowed' => $user === AIRADIO_ALLOWED_USER,
+        'allowed' => $user !== '',
         'login_url' => '?demo_login=' . AIRADIO_ALLOWED_USER,
         'logout_url' => '?demo_logout=1',
     ];
