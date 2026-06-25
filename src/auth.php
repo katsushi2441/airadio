@@ -42,6 +42,8 @@ function airadio_auth() {
         $auth = url2ai_auth_bootstrap();
         $sessionUser = isset($auth['session_user']) ? $auth['session_user'] : '';
         $auth['allowed'] = !empty($auth['logged_in']) && $sessionUser === AIRADIO_ALLOWED_USER;
+        $auth['login_url'] = airadio_common_login_url();
+        $auth['logout_url'] = airadio_common_logout_url();
         return $auth;
     }
     if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
@@ -54,6 +56,14 @@ function airadio_auth() {
         'login_url' => '?demo_login=' . AIRADIO_ALLOWED_USER,
         'logout_url' => '?demo_logout=1',
     ];
+}
+
+function airadio_common_login_url() {
+    return 'https://aiknowledgecms.exbridge.jp/aiknowledgesns.php?aks_login=1&return=' . urlencode(AIRADIO_PUBLIC_BASE_URL);
+}
+
+function airadio_common_logout_url() {
+    return 'https://aiknowledgecms.exbridge.jp/aiknowledgesns.php?aks_logout=1&return=' . urlencode(AIRADIO_PUBLIC_BASE_URL);
 }
 
 function airadio_handle_dev_login() {
