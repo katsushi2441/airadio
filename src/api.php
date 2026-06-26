@@ -128,8 +128,8 @@ if ($action === 'start') {
         'requested_theme' => $rawTheme,
         'title' => $hasInstruction ? airadio_spoken_theme_title($theme, $rawTheme) . 'を始めます' : 'オープニング',
         'text' => $hasInstruction
-            ? 'こんばんは。Kurage AI VTuber Radioです。今夜は' . airadio_spoken_theme_title($theme, $rawTheme) . 'から始めます。まず本題です。AI時代の学びは、知識を暗記するより、作りたいものを言葉にして、小さく作り、動かして直す流れを身につけることが大切です。'
-            : 'こんばんは。Kurage AI VTuber Radioです。今夜は' . airadio_spoken_theme_title($theme) . 'を、実装と発信に使える形で静かに深掘りします。短い一般論を繰り返さず、少しずつ具体化していきます。',
+            ? 'こんばんは。Kurage AI VTuber Radioです。' . airadio_spoken_theme_title($theme, $rawTheme) . 'について話します。'
+            : 'こんばんは。Kurage AI VTuber Radioです。' . airadio_spoken_theme_title($theme) . 'について話します。',
         'source' => 'opening',
         'created_at' => date('c'),
     ]];
@@ -169,7 +169,7 @@ if ($action === 'interrupt') {
         'theme' => $theme,
         'requested_theme' => $rawTheme,
         'title' => airadio_spoken_theme_title($theme, $rawTheme) . 'へ切り替え',
-        'text' => airadio_spoken_theme_title($theme, $rawTheme) . 'に切り替えます。まず本題です。このテーマで見るべきなのは、何が新しく、どこが実践に使えて、今日どの一手に変えられるかです。そこから静かに整理します。',
+        'text' => airadio_spoken_theme_title($theme, $rawTheme) . 'について話します。',
         'source' => 'interrupt',
         'created_at' => date('c'),
     ];
@@ -199,10 +199,10 @@ if ($action === 'next') {
         $theme = isset($state['theme']) ? $state['theme'] : 'AI思考';
         $bridgeCount = isset($state['bridge_count']) ? ((int)$state['bridge_count'] + 1) : 1;
         $bridgeTexts = [
-            '編集者とリスナーへ、次の台本を待つ間に、' . $theme . 'を実装目線で一つだけ分解します。いま見るポイントは、情報収集をどう行動へ変えるかです。',
-            'Kurageから短い補助線です。' . $theme . 'は、ツール名ではなく仕事の流れとして見ると理解しやすくなります。調べる、作る、投稿する、この順番です。',
-            'ここでは同じまとめに戻らず、別の角度から見ます。' . $theme . 'で収益化を考えるなら、まず発信量と検証速度を上げる仕組みが必要です。',
-            '少しだけ技術側に寄せます。' . $theme . 'を動かすには、LLM、ブラウザ操作、ジョブ管理、ログ保存を分けると、失敗しても立て直しやすくなります。',
+            $theme . 'について、次の台本を待つあいだに全体像を短く整理します。資料にあることと、まだ分からないことを分けて聞くと理解しやすくなります。',
+            $theme . 'を別の角度から見ます。大事なのは、名前の印象ではなく、何を説明しようとしているのかを押さえることです。',
+            $theme . 'の話を聞くときは、背景、仕組み、使いどころ、注意点に分けると、内容がほどけていきます。',
+            $theme . 'について、次に確認したい問いを一つ置きます。この資料は、誰のどんな課題に役立つのか。そこから見ていきます。',
         ];
         $bridgeText = $bridgeTexts[($bridgeCount - 1) % count($bridgeTexts)];
         $item = [

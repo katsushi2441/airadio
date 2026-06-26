@@ -19,7 +19,7 @@ function airadio_write_json($path, $data) {
 function airadio_state() {
     return airadio_read_json(AIRADIO_STATE_FILE, [
         'status' => 'idle',
-        'theme' => 'AI思考、バイブコーディング、やさしい睡眠ラジオ',
+        'theme' => '編集者が選ぶテーマを静かに深掘りするラジオ',
         'duration_hours' => 1,
         'started_at' => '',
         'ends_at' => '',
@@ -288,38 +288,20 @@ function airadio_theme_is_github_repo($input) {
 
 function airadio_spoken_theme_title($theme, $instruction = '') {
     $source = trim((string)$instruction) !== '' ? (string)$instruction : (string)$theme;
-    $repoLabel = airadio_extract_github_repo_label($source);
-    if ($repoLabel === '' && preg_match('~([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)~', (string)$theme, $m)) {
-        $repoLabel = $m[1] . '/' . $m[2];
-    }
-    if ($repoLabel !== '') {
-        $parts = explode('/', $repoLabel, 2);
-        $repo = isset($parts[1]) ? preg_replace('/\.git$/i', '', $parts[1]) : $repoLabel;
-        $map = [
-            'easy-vibe' => 'イージーバイブ',
-            'open-llm-vtuber' => 'オープン エルエルエム ブイチューバー',
-            'aituber-onair' => 'エーアイチューバー オンエア',
-        ];
-        $key = strtolower($repo);
-        if (isset($map[$key])) { return $map[$key]; }
-        $repo = preg_replace('/[-_]+/', ' ', $repo);
-        return trim($repo) !== '' ? $repo : $repoLabel;
+    if (airadio_extract_github_repo_label($source) !== '' || preg_match('~[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+~', (string)$theme)) {
+        return 'このリポジトリ';
     }
     $spoken = preg_replace('~https?://[^\s「」『』"\'`<>]+~u', '', (string)$theme);
     $spoken = preg_replace('/\s+/u', ' ', $spoken);
-    return trim($spoken) !== '' ? trim($spoken) : trim((string)$theme);
+    return trim($spoken) !== '' ? trim($spoken) : 'このテーマ';
 }
 
 function airadio_default_theme_from_profile($profile) {
-    $username = isset($profile['username']) ? trim((string)$profile['username']) : '';
     $description = isset($profile['description']) ? trim((string)$profile['description']) : '';
-    if ($username === 'xb_bittensor' || stripos($description, 'bittensor') !== false || stripos($description, 'Web3xAIxSNS') !== false) {
-        return '編集者が学びたい、Bittensor、分散AI、AI Agent、Claude Code/Codex、バイブコーディング、Web3収益化を静かに深掘りする';
-    }
     if ($description !== '') {
-        return 'Xプロフィールに合わせて、AI活用、発信、収益化、実装のヒントを静かに深掘りする';
+        return 'Xプロフィールに合わせて、編集者が関心を持つテーマを静かに深掘りする';
     }
-    return '編集者が学びたい、AI Agent、バイブコーディング、分散AI、Web3収益化を静かに深掘りする';
+    return '編集者が選ぶテーマを静かに深掘りする';
 }
 
 function airadio_normalize_theme_request($input) {
@@ -355,63 +337,26 @@ function airadio_normalize_theme_request($input) {
 
 function airadio_theme_guidance($theme) {
     $theme = (string)$theme;
-    if (preg_match('/入門|初心者|初級|はじめて|基礎/u', $theme)) {
-        return '初心者向けに、専門用語を短く説明し、なぜ必要か、最初に何をすればよいか、つまずきやすい点、今日できる小さな実践の順に話す。上級者向けの抽象論や収益化の話へ急がない。';
-    }
-    if (preg_match('/応用|実践|収益|稼/u', $theme)) {
-        return '実践者向けに、具体的な手順、ツール選択、検証方法、失敗時の立て直し、収益化への接続を中心に話す。';
-    }
     if (airadio_theme_is_github_repo($theme)) {
-        return 'GitHubリポジトリを一次資料として扱い、READMEの内容、対象読者、学習パス、使いどころ、注意点を具体的に話す。URL名だけで済ませず、教材の中身に沿って構成する。';
+        return 'GitHubリポジトリを一次資料として扱い、READMEとリポジトリ情報から重要点を判断して話す。資料にない文脈を勝手に足さない。';
     }
-    return '入力されたテーマの意図を保ち、一般論に薄めず、具体例と実装・発信・検証の観点を入れて話す。';
+    if (preg_match('/入門|初心者|初級|はじめて|基礎/u', $theme)) {
+        return '初心者向けに、専門用語を短く説明し、初めて聞く人が理解できる順番で話す。';
+    }
+    if (preg_match('/応用|実践/u', $theme)) {
+        return '実践者向けに、具体的な手順、検証方法、失敗時の立て直しを中心に話す。';
+    }
+    return '入力されたテーマの意図を保ち、一般論に薄めず、資料や指示に沿って話す。';
 }
 
 function airadio_seed_profile_program($theme, $profile) {
-    $username = isset($profile['username']) && $profile['username'] !== '' ? $profile['username'] : 'xb_bittensor';
+    $username = isset($profile['username']) && $profile['username'] !== '' ? $profile['username'] : '編集者';
     $now = time();
-    $texts = [
-        [
-            'title' => 'プロフィールから始める',
-            'text' => '今夜のKurageは、編集者が学びたいテーマを入口に、他のリスナーにも伝わる形で話します。Bittensor、分散AI、AI Agent、Claude CodeやCodex、そしてバイブコーディング。これらは別々の流行語ではなく、個人や小さな会社が、情報収集から実装、発信、収益化までを自分で回すための部品です。最初は、この部品をどうつなぐかから静かに見ていきます。',
-            'source' => 'claude-seed-profile',
-        ],
-        [
-            'title' => 'Bittensorを仕事の流れで見る',
-            'text' => 'Bittensorを考えるとき、価格やトークンだけを見ると話が浅くなります。Kurageが注目したいのは、知能や推論、データ処理をネットワークとして扱う発想です。もしAI Agentが情報を集め、評価し、成果物を作るなら、その価値をどう測るのか。分散AIの文脈は、ここで実装と収益化の話につながります。',
-            'source' => 'claude-seed-bittensor',
-        ],
-        [
-            'title' => 'Claude CodeとCodexの使い分け',
-            'text' => 'Claude CodeとCodexは、どちらが上かではなく、どこに置くかで考えると実用的です。Claudeには構成や判断、長い文脈の整理を任せる。Codexにはリポジトリを触りながら実装、テスト、コミットまで進めさせる。この二つを雑に混ぜるより、役割を分けたほうが失敗ログも残り、次の改善が楽になります。',
-            'source' => 'claude-seed-tools',
-        ],
-        [
-            'title' => 'バイブコーディングの本質',
-            'text' => 'バイブコーディングは、気分でコードを書くことではありません。自然言語で目的を伝え、AIに作業させ、動作確認し、違和感を言葉にして戻す。この往復を速くする開発スタイルです。大事なのは、AIに丸投げすることではなく、成果物を見る目、修正を指示する言葉、そして作業ログを残す習慣です。',
-            'source' => 'claude-seed-vibe',
-        ],
-        [
-            'title' => '収益化は発信量から始まる',
-            'text' => 'Web3やAIで稼ぐ話は派手に見えますが、最初の現実的なレバーは発信量です。調べたことをブログにし、短い動画にし、SNSで告知し、反応を見て次のテーマを決める。ここをAI Agentで半自動化できると、ひとりでも検証回数を増やせます。収益化は一発の正解より、検証回数の設計に近いです。',
-            'source' => 'claude-seed-monetization',
-        ],
-        [
-            'title' => 'Kurage AgentReachによる情報収集',
-            'text' => '情報収集では、ただ検索結果を並べても価値になりません。Kurageが見るべきなのは、誰が何に反応しているか、どの切り口が伸びているか、そこから自分のプロダクトにどう接続できるかです。Kurage AgentReachは、話題を拾う入口であり、台本や実装タスクへ変換して初めて仕事になります。',
-            'source' => 'claude-seed-research',
-        ],
-        [
-            'title' => '失敗回避の設計',
-            'text' => 'AI Agentを使うときの失敗は、賢さ不足だけではありません。同じ話を繰り返す、古いデータを読む、ログが残らない、確認せず投稿する。こうした失敗を避けるには、記憶、キュー、状態、レビューの層を分けます。今回のラジオでも、話した内容を記録し、同じ台本へ戻らないことが重要です。',
-            'source' => 'claude-seed-risk',
-        ],
-        [
-            'title' => '次の問い',
-            'text' => '最後に、編集者とリスナーへ問いを置きます。Bittensor、AI Agent、バイブコーディングを、自分の発信やサービスに組み込むなら、最初に自動化する一手は何でしょうか。調査でしょうか、台本生成でしょうか、動画化でしょうか。Kurageは次の話題で、その一手を小さな実装単位に分けていきます。',
-            'source' => 'claude-seed-question',
-        ],
-    ];
+    $texts = [[
+        'title' => 'オープニング',
+        'text' => '今夜は、プロフィールから見えてくる関心に沿って話します。具体的な中身は、集めた情報と台本生成の結果をもとに、順番に深めていきます。',
+        'source' => 'profile-seed-opening',
+    ]];
     $items = [];
     foreach ($texts as $i => $row) {
         $row['id'] = 'seed-' . $now . '-' . $i;
@@ -425,52 +370,17 @@ function airadio_seed_profile_program($theme, $profile) {
 
 function airadio_seed_instruction_program($theme, $instruction, $guidance) {
     $now = time();
-    $instruction = trim((string)$instruction);
-    $guidance = trim((string)$guidance);
     $spoken = airadio_spoken_theme_title($theme, $instruction);
-    $isGithub = airadio_theme_is_github_repo($theme) || airadio_theme_is_github_repo($instruction);
-    if ($isGithub) {
-        $texts = [
-            [
-                'title' => $spoken . 'の核心',
-                'text' => $spoken . 'は、AI時代の開発を「コードを暗記する作業」から「作りたいものを言葉にして、AIと一緒に形にする学習」へ変える教材です。最初に見るべきポイントは、初心者が小さな成功体験から入り、プロトタイプ、フルスタック開発、AIネイティブな開発へ進めるように道筋が分かれていることです。',
-                'source' => 'instruction-seed-opening',
-            ],
-            [
-                'title' => '学習パスの見どころ',
-                'text' => 'この教材の聞きどころは、バイブコーディングを気分の話で終わらせず、会話、画面、データ、決済、公開までの実践に落としている点です。リスナーは、全部を覚えようとせず、自分の仕事で次に作りたい一機能へ置き換えて聞くと理解しやすくなります。',
-                'source' => 'instruction-seed-map',
-            ],
-            [
-                'title' => '最初の実践へ',
-                'text' => 'まずは、作りたい小さなアプリを一文で言うところから始めます。AIに全部任せるのではなく、入力欄を作る、保存する、表示を直す、公開する、というように一歩ずつ頼む。この往復が、バイブコーディングを実際の開発力に変えます。',
-                'source' => 'instruction-seed-practice',
-            ],
-        ];
-    } else {
-        $texts = [
-            [
-                'title' => $spoken . 'を始める',
-                'text' => 'ここからは' . $spoken . 'です。まず、なぜこのテーマが今の開発や発信に効くのかを整理し、次に具体的な使い方、つまずきやすい点、今日できる小さな実践へ進みます。',
-                'source' => 'instruction-seed-opening',
-            ],
-            [
-                'title' => '今日の聞きどころ',
-                'text' => '最初に大切なのは、何を知れば一歩進めるのかをはっきりさせることです。言葉の意味、実際の使い方、つまずきやすい点、今日試せる小さな行動の順に整理します。',
-                'source' => 'instruction-seed-map',
-            ],
-            [
-                'title' => '最初の実践へ',
-                'text' => 'このテーマは、聞いて終わりではなく、小さく試すことで身につきます。いまの自分の作業に置き換えるなら、どの一手をAIと一緒に進められるか。そこから見ていきます。',
-                'source' => 'instruction-seed-practice',
-            ],
-        ];
-    }
+    $texts = [[
+        'title' => $spoken,
+        'text' => $spoken . 'について、資料の内容から順に見ていきます。まずは全体像、次に重要なポイント、最後に使いどころを整理します。',
+        'source' => 'instruction-seed-opening',
+    ]];
     $items = [];
     foreach ($texts as $i => $row) {
         $row['id'] = 'instruction-seed-' . $now . '-' . $i;
         $row['theme'] = $theme;
-        $row['requested_theme'] = $instruction;
+        $row['requested_theme'] = trim((string)$instruction);
         $row['created_at'] = date('c', $now);
         $items[] = $row;
     }

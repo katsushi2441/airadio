@@ -461,132 +461,60 @@ def normalize_theme_request(text: str) -> str:
 
 def theme_guidance(theme: str) -> str:
     if re.search(r'入門|初心者|初級|はじめて|基礎', theme):
-        return 'このテーマは入門編として扱う。専門用語を短く説明し、なぜ必要か、最初に何をすればよいか、つまずきやすい点、今日できる小さな実践の順に話す。上級者向けの抽象論や収益化の話へ急がない。'
+        return 'このテーマは入門編として扱う。専門用語を短く説明し、初めて聞く人が理解できる順番で話す。'
     if re.search(r'応用|実践|収益|稼', theme):
-        return 'このテーマは実践編として扱う。具体的な手順、ツール選択、検証方法、失敗時の立て直し、収益化への接続を中心に話す。'
+        return 'このテーマは実践編として扱う。具体的な手順、検証方法、失敗時の立て直しを中心に話す。'
     return '入力されたテーマの意図を保ち、一般論に薄めず、具体例と実装・発信・検証の観点を入れて話す。'
 
 
 
 
-def spoken_repo_name(repo: str) -> str:
-    name = str(repo or '').split('/')[-1]
-    name = re.sub(r'\.git$', '', name, flags=re.I)
-    mapping = {
-        'easy-vibe': 'イージーバイブ',
-        'open-llm-vtuber': 'オープン エルエルエム ブイチューバー',
-        'aituber-onair': 'エーアイチューバー オンエア',
-    }
-    key = name.lower()
-    if key in mapping:
-        return mapping[key]
-    return re.sub(r'[-_]+', ' ', name).strip() or str(repo or '').strip()
-
-
-def sanitize_spoken_text(text: str, github_items: list[dict[str, Any]] | None = None) -> str:
+def sanitize_spoken_text(text: str) -> str:
     text = re.sub(r'https?://[^\s「」『』"\'`<>]+', '', text or '')
     text = text.replace('xb_bittensorさん', '編集者さん').replace('xb_bittensor', '編集者')
-    for item in github_items or []:
-        repo = str(item.get('repo') or '')
-        if not repo:
-            continue
-        spoken = spoken_repo_name(repo)
-        owner = repo.split('/')[0]
-        raw_name = repo.split('/')[-1]
-        patterns = [re.escape(repo), re.escape(owner + ' の ' + raw_name), re.escape(raw_name)]
-        for pattern in patterns:
-            text = re.sub(pattern, spoken, text, flags=re.I)
-    text = re.sub(r'プログラ[^ぁ-んァ-ヶ一-龠。、,.]{1,12}g', 'プログラミング', text)
     text = re.sub(r'\s+', ' ', text)
     text = re.sub(r'\s+([。、,.])', r'\1', text)
     return text.strip()
 
-def github_fallback_segments(theme: str, github_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    if not github_items:
-        return []
-    repo = github_items[0]
-    raw_repo = str(repo.get('repo') or theme)
-    name = spoken_repo_name(raw_repo)
-    desc = str(repo.get('description') or 'AI時代の学習教材')
-    stars = int(repo.get('stars') or 0)
-    license_name = str(repo.get('license') or '')
-    summary = str(repo.get('readme_summary') or repo.get('readme_excerpt') or '')
-    has_stage = 'Stage' in summary or 'stage' in summary.lower() or '学習' in summary
-    star_text = f'GitHubで約{stars:,}スターを集めている' if stars else 'GitHubで公開されている'
-    license_text = f'ライセンスは{license_name}です。' if license_name else 'ライセンスや再利用条件は、実際に使う前に確認しておきたい点です。'
-    if 'easy-vibe' in raw_repo.lower():
-        texts = [
-            f'{name}は、話せればアプリを作れるというAI時代の開発観を、初心者が実践できる学習コースに落とした教材です。説明には「{desc}」とありますが、見るべき核心は、知識を暗記する前に、小さな成果物を作りながら理解していく設計です。',
-            f'{name}が面白いのは、{star_text}点です。READMEでは、完全な初心者、プロダクトマネージャー、学生、ジュニア開発者、そしてAIネイティブな開発者まで、対象者ごとに学習パスを分けています。つまり、バイブコーディングを感覚論ではなく、段階的な教育コースに落としているわけです。',
-            '学習パスは、まず小さな成功体験から入り、次にアイデアをプロトタイプへ変え、さらにフルスタック開発へ進む流れです。ここが大事です。AIに丸投げするのではなく、目的を言葉にし、画面を作り、バックエンドや決済のような現実の部品へ接続していく順番があるからです。',
-            '編集者がこの教材から学べる実践ポイントは、AIRadioやKurageの開発にもそのまま使えます。まず作りたい体験を言葉にする。次にAIに小さく実装させる。動作を見て、違和感を戻す。そしてログや手順を残す。この往復が、バイブコーディングを仕事の方法に変えます。',
-            f'注意点もあります。{license_text}また、多言語教材や派手なデモを見るだけで満足すると、実装力にはつながりません。自分のプロジェクトで一画面、一機能、一投稿のように、小さく試すところまで持っていく必要があります。',
-            f'まとめると、{name}はバイブコーディングを「なんとなくAIに頼む」から、「話す、作る、確認する、直す」という学習ループへ変える教材です。今夜の編集者への問いは一つです。この教材の考え方を使って、明日どの小さな機能をAIと一緒に作るか。そこから始めましょう。',
-        ]
-    else:
-        texts = [
-            f'ここからは{name}を、GitHubリポジトリを一次資料として見ていきます。説明は「{desc}」です。まず、何を解決するためのリポジトリなのか、誰に向いているのかを静かに整理します。',
-            f'{name}は{star_text}公開プロジェクトです。スター数は万能ではありませんが、関心の強さや学習価値を見る入口になります。READMEの構成から、作者が何を最短で伝えたいのかを読み取ることができます。',
-            '実務で見るべき点は、インストール手順、サンプル、対象読者、拡張方法、そしてライセンスです。AIに調べさせるだけではなく、自分のプロダクトに取り込める部分と、参考に留める部分を分けることが大切です。',
-            f'{license_text}OSSを使うときは、商用利用、改変、再配布、クレジット表記の条件を先に見ます。ここを曖昧にすると、あとでプロダクト化するときに詰まりやすくなります。',
-            '編集者が次にやることは、READMEを読むだけではなく、ひとつのユースケースへ翻訳することです。自分なら、この機能をKurageのどこに接続するか。どの作業を楽にするか。そこまで落とすと、情報収集が実装に変わります。',
-            f'まとめると、{name}はURLではなく、設計思想、実装部品、学習導線のまとまりとして扱うべき資料です。Kurageはこの一次情報をもとに、静かなラジオとして、実装に使える形へほどいていきます。',
-        ]
-    now = int(time.time())
-    return [{
-        'id': f'github-fallback-{now}-{i}',
-        'theme': theme,
-        'title': f'{name} {i + 1}',
-        'text': text,
-        'source': 'github-fallback',
-        'created_at': time.strftime('%Y-%m-%dT%H:%M:%S%z'),
-    } for i, text in enumerate(texts)]
+
+
+def theme_for_speech(theme: str) -> str:
+    if re.search(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', theme or ''):
+        return 'このリポジトリ'
+    cleaned = re.sub(r'https?://[^\s「」『』"\'`<>]+', '', theme or '')
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+    return cleaned or 'このテーマ'
 
 def fallback_segments(theme: str) -> list[dict[str, Any]]:
     memory = load_memory()
-    if re.search(r'入門|初心者|初級|はじめて|基礎', theme):
-        base = [
-            f'ここからは{theme}として、はじめての人にも分かる順番で話します。バイブコーディングは、雰囲気でコードを書くことではありません。作りたいものを言葉にし、AIに実装させ、動かして確かめ、違和感をまた言葉で返す開発の往復です。',
-            '最初に大事なのは、完璧なプロンプトではなく、小さく頼むことです。たとえば、ログイン画面を全部作って、ではなく、まず入力欄とボタンだけ作って、次に保存、次にエラー表示、というように分けます。',
-            '初心者がつまずきやすいのは、AIの返答をそのまま信じるところです。動いたか、画面で見たか、エラーは出ていないか、Gitに何が変わったか。この確認をセットにすると、バイブコーディングは急に実用的になります。',
-            '使う道具は、最初は多くなくて大丈夫です。ブラウザで確認できる小さなWebページ、Gitで差分を見る習慣、そしてAIに直してほしい点を一文で伝えること。この三つが入門編の土台です。',
-            '今日できる小さな実践は、ひとつの画面を決めて、ここをもう少し分かりやすくして、とAIに頼むことです。そのあと、どこが変わったかを自分の目で見る。ここからAIと一緒に作る感覚が育ちます。',
-            'まとめると、バイブコーディング入門で覚えることは、AIに任せることではなく、AIとの往復を設計することです。目的を言う、作らせる、見る、直す。この四拍子を小さく回すところから始めましょう。',
-        ]
-    else:
-        base = [
-            f'ここからは{theme}を、AIエージェントを実際に動かす人の目線で見ていきます。今日はまず、情報収集、判断、実行の三つを分けて考えます。',
-            'KurageがDJとして、いま見えている論点をゆっくり整理します。編集者もリスナーも、全部覚えようとしなくて大丈夫です。使えそうな一文だけ拾ってください。',
-            f'{theme}で大切なのは、流行語を追うことではなく、明日の作業が一つ軽くなるかどうかです。小さな自動化を積み重ねると、やがて仕事の流れそのものが変わります。',
-            '次の観点は、ツール選びです。Claude Code、Codex、ローカルLLM、browser-useのような操作エージェントは、それぞれ得意な待ち時間と失敗の仕方が違います。',
-            'AIに仕事を任せるときは、成果物だけではなく、途中のログ、判断理由、やり直し方を残すことが価値になります。これは後から人に渡せる知識になるからです。',
-            'ここまでを一度まとめます。テーマを小さく切り、AIに調べさせ、台本にし、実行し、ログを残す。この循環が、編集者向けのAI思考ラジオの基本形です。',
-        ]
+    spoken_theme = theme_for_speech(theme)
+    base = [
+        f'{spoken_theme}について、まず全体像から静かに整理します。いま分かっていること、重要な背景、聞く側が押さえるべきポイントを順番に見ていきます。',
+        f'次に、{spoken_theme}の中で特に大事な論点を一つ選びます。名前や流行ではなく、何ができるようになるのか、どんな場面で役に立つのかを考えます。',
+        f'{spoken_theme}を実際に使うなら、最初に確認するべきなのは目的です。何を知りたいのか、何を作りたいのか、何を判断したいのか。そこが決まると話が現実に近づきます。',
+        f'注意点も見ておきます。{spoken_theme}は便利な言葉ほど、意味が広がりすぎます。資料に書かれていることと、自分で推測したことを分けて考える必要があります。',
+        f'最後に、{spoken_theme}を次の行動へ変えるなら、小さな問いを一つ置くのがよさそうです。今日この話から、どの一文を持ち帰るか。そこから始めます。',
+    ]
     items = []
     for i, text in enumerate(base):
         if is_duplicate_text(text, memory):
             continue
-        items.append({'id': f'fallback-{int(time.time())}-{i}', 'theme': theme, 'title': f'{theme}の視点 {i + 1}', 'text': text, 'source': 'fallback-curated'})
+        items.append({'id': f'fallback-{int(time.time())}-{i}', 'theme': theme, 'title': f'{spoken_theme} {i + 1}', 'text': text, 'source': 'fallback-generic'})
     if not items:
-        now = time.strftime('%H時%M分')
-        items.append({
-            'id': f'fallback-{int(time.time())}-fresh',
-            'theme': theme,
-            'title': f'{theme}の新しい切り口',
-            'text': f'{now}の時点で、Kurageは{theme}を別の角度から見直します。今回は、情報収集の精度ではなく、集めた情報をどう行動に変えるかに絞って、編集者とリスナーへ話します。',
-            'source': 'fallback-curated',
-        })
+        now_label = time.strftime('%H時%M分')
+        text = f'{now_label}の時点で、{spoken_theme}についてもう一度整理します。次の台本では、資料に書かれている内容をもとに、重要な点から順に話します。'
+        items.append({'id': f'fallback-{int(time.time())}-fresh', 'theme': theme, 'title': f'{spoken_theme}の続き', 'text': text, 'source': 'fallback-generic'})
     remember_segments(items)
     return items
 
 
 def bridge_segments(theme: str) -> list[dict[str, Any]]:
     memory = load_memory()
+    spoken_theme = theme_for_speech(theme)
     base = [
-        f'次の資料を待つあいだに、{theme}の判断軸を一つだけ置いておきます。収益化につながるかどうかは、作業時間を減らすか、発信量を増やすかで見るとわかりやすいです。',
-        '少し視点を変えます。AIエージェントの価値は、賢い返答だけではありません。調べる、試す、記録する、次に渡す。この地味な連携が積み上がるところにあります。',
-        'ここでは結論を急ぎません。Kurageは、編集者があとで実装や発信に使えるように、話題を小さな部品へ分けていきます。',
-        '次の台本を作っている間に、ひとつだけ実践の問いを置きます。このテーマで、今日すぐ自動化できる一手は何か。そこから考えると、話が現実に近づきます。',
+        f'{spoken_theme}について、次の台本を整えるあいだに、全体像を短く振り返ります。大事なのは、言葉の印象ではなく、資料が何を伝えようとしているかです。',
+        '少しだけ視点を変えます。いま聞いている内容を、自分ならどこで使うか。そう考えると、抽象的な話も具体的になります。',
+        f'{spoken_theme}を理解するときは、結論を急がず、背景、仕組み、使いどころ、注意点に分けると聞きやすくなります。',
     ]
     now = int(time.time())
     items = []
@@ -596,7 +524,7 @@ def bridge_segments(theme: str) -> list[dict[str, Any]]:
         items.append({
             'id': f'bridge-{now}-{i}',
             'theme': theme,
-            'title': f'{theme}の考え方 {i + 1}',
+            'title': f'{spoken_theme} {i + 1}',
             'text': text,
             'source': 'bridge',
             'created_at': time.strftime('%Y-%m-%dT%H:%M:%S%z'),
@@ -618,8 +546,9 @@ def build_segments(theme: str, profile: dict[str, Any], research: dict[str, Any]
     }, ensure_ascii=False)[:5000]
     prompt = f'''
 あなたは「Kurage AI VTuber Radio」のメイン構成作家です。
-KurageがDJで、編集者は聞き手であり番組を整える人です。ログインした他ユーザーは同じ番組を聞くリスナーです。
-自由入力指示がある場合はその指示を最優先します。指示がない場合だけ、編集者のXプロフィールに合うテーマから入り、AI、Bittensor、分散AI、Web3、バイブコーディング、Claude Code/Codex、AI Agent、収益化の文脈を自然に接続してください。
+KurageがDJで、編集者とリスナーへ向けて静かに解説します。
+自由入力指示がある場合は、そのテーマだけを主題にします。資料や指示に書かれていない文脈を勝手に足さないでください。
+自由入力指示がない場合だけ、聞き手プロフィールを参考にテーマを広げてください。
 
 テーマ: {theme}
 編集者の自由入力指示: {instruction or 'なし'}
@@ -635,17 +564,17 @@ GitHubリポジトリを主教材として扱うか: {'はい' if github_primary
 - Kurageが編集者とリスナーへ話しかける口調。
 - 内部アカウント名やユーザーIDは読み上げない。xb_bittensorのような名前は必ず「編集者」と呼ぶ。
 - 英語の長い言い回しを混ぜず、自然な日本語で説明する。固有名詞以外は日本語にする。
-- 編集者の学びを、他のリスナーにも役立つ解説へ変換する。
-- 自由入力指示がある場合は、その文章の意図を最優先する。プロフィール起点の定番台本、Bittensor、Web3、収益化の話に勝手に戻らない。
+- テーマと資料の内容を、リスナーにも分かる自然な解説へ変換する。
+- 自由入力指示がある場合は、その文章の意図を最優先する。プロフィール起点の定番台本や別テーマに勝手に戻らない。
 - 自由入力指示はフォーマットなしの自然文として扱い、「何について」「どのレベルで」「どう話してほしいか」を推測して台本化する。
-- GitHubリポジトリURLが入力された場合は、情報収集メモ内のgithub項目を一次資料として扱う。READMEの内容、対象読者、学習パス、特徴、ライセンスや注意点を具体的に話す。URL、owner/repo、長い英数字識別子は読み上げない。easy-vibeは「イージーバイブ」と呼ぶ。一般的なバイブコーディング論へ薄めない。
+- GitHubリポジトリURLが入力された場合は、情報収集メモ内のgithub項目を一次資料として扱う。READMEの内容を読んで、Claude自身が重要だと判断した点を話す。URL、owner/repo、長い英数字識別子は読み上げない。
 - GitHub主教材の場合、各segmentの角度は repository_overview, why_it_matters, learning_path, practical_use, caveats, editor_action のように、資料の中身に沿って分ける。
 - 1本あたり60〜120秒程度で読める長さ。
 - 同じ言い回し、同じ結論、同じブリッジトークは禁止。
-- 抽象論だけで終わらせない。具体的なツール、実装、収益化、発信、検証、失敗回避を入れる。
+- 抽象論だけで終わらせない。ただし資料や指示にない話題を無理に足さない。
 - 眠りを促すラジオなので穏やか。ただし中身は濃く、薄い一般論にしない。
-- テーマ解釈を最優先する。たとえば「入門編」なら、初めて聞く人が理解できる順番、用語説明、最初の実践、つまずき回避を中心にする。
-- 各segmentは別の角度にする: profile_hook, current_signal, tool_workflow, monetization, implementation_note, closing_question。
+- テーマ解釈を最優先する。たとえば「入門編」なら、初めて聞く人が理解できる順番にする。
+- 各segmentは別の角度にする。角度は資料の内容からClaudeが決める。
 - 「裏側で情報収集しています」「呼吸を整えましょう」のような待ち文句を繰り返さない。
 - JSONだけで返す。shape: {{"segments":[{{"title":"...","text":"...","source":"..."}}]}}
 - segmentsは6個。
@@ -664,13 +593,10 @@ GitHubリポジトリを主教材として扱うか: {'はい' if github_primary
                     item['text'] = sanitize_spoken_text(str(item.get('text') or ''), github_items)
                     item['title'] = sanitize_spoken_text(str(item.get('title') or ''), github_items)
             if len(out) >= 4:
-                if github_primary and len(out) < 6:
-                    out.extend(github_fallback_segments(theme, github_items)[: 6 - len(out)])
                 remember_segments(out[:6])
                 return out[:6]
             if out:
-                filler = github_fallback_segments(theme, github_items) if github_primary else bridge_segments(theme)
-                out.extend(filler[: 6 - len(out)])
+                out.extend(bridge_segments(theme)[: 6 - len(out)])
                 remember_segments(out[:6])
                 return out[:6]
             model_errors.append(f'{provider}: no valid segments')
@@ -686,8 +612,6 @@ def enrich_profile(profile: dict[str, Any]) -> dict[str, Any]:
     if not username:
         username = 'xb_bittensor'
     enriched.setdefault('username', username)
-    if username == 'xb_bittensor' and not enriched.get('description'):
-        enriched['description'] = 'Bittensor、分散AI、AI Agent、Claude Code/Codex、バイブコーディング、Web3収益化に関心がある編集者。'
     enriched['listener_role'] = 'The editor is the listener and curator; Kurage is the DJ and speaker for all listeners.'
     return enriched
 
@@ -726,7 +650,7 @@ def main() -> None:
     args = parser.parse_args()
     payload = read_json(Path(args.payload), {})
     instruction = str(payload.get('instruction') or '').strip()
-    theme = normalize_theme_request(str(payload.get('theme') or instruction or 'AI思考とバイブコーディング'))
+    theme = normalize_theme_request(str(payload.get('theme') or instruction or '編集者が選ぶテーマ'))
     profile = payload.get('profile') if isinstance(payload.get('profile'), dict) else {}
     ignore_profile_script = bool(payload.get('ignore_profile_script')) or bool(instruction)
 

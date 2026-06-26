@@ -31,7 +31,7 @@ $isAdmin = !empty($auth['is_admin']);
   <section class="hero">
     <div class="card">
       <div class="brand"><div><span class="tag">聴きながらよく寝れる</span><h1>Kurage AI<br>VTuber Radio</h1></div><a class="btn secondary" href="<?= htmlspecialchars($logoutUrl) ?>">ログアウト</a></div>
-      <p class="lead">KurageがDJ、編集者が学びたいテーマを選ぶ番組です。Kurage AgentReachで情報収集しながら、AI、Bittensor、バイブコーディング、Web3収益化を、眠りに入りやすいテンポで深く学べるラジオとして話し続けます。</p>
+      <p class="lead">KurageがDJ、編集者が学びたいテーマを選ぶ番組です。Kurage AgentReachで情報収集しながら、指定されたテーマを、眠りに入りやすいテンポで深く学べるラジオとして話し続けます。</p>
       <div class="rolePill">編集者がテーマを整え、Kurageがリスナーへ語ります</div>
       <?php if ($isAdmin): ?>
       <div class="controls"><textarea id="theme" placeholder="割り込ませたいテーマがあれば入力。空白のまま開始すると、編集者のXプロフィールからテーマを作ります。"></textarea><select id="hours"><option value="1">1時間</option><option value="2">2時間</option><option value="3">3時間</option><option value="4">4時間</option><option value="5">5時間</option><option value="6">6時間</option></select></div>

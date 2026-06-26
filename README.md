@@ -94,8 +94,8 @@ Comment loop:
 The broadcaster account can type a theme such as:
 
 ```text
-バイブコーディングをテーマにして
-バイブコーディング入門編というテーマで話して
+このURLをテーマにして
+初心者向けにこの資料を解説して
 ```
 
 The UI immediately queues a short transition segment and starts background
@@ -140,14 +140,15 @@ the URL as a search keyword. The background worker extracts `owner/repo`, reads
 GitHub metadata and README content, summarizes the learning path, and passes
 that material into the script prompt. X search remains supplemental.
 
-This prevents repository-based topics from becoming generic AI talk. For
-`easy-vibe`, the generated program should discuss the course concept, target
-learners, staged learning paths, practical projects, and usage caveats.
+This prevents repository-based topics from becoming generic AI talk. The
+program should let Claude decide what matters from the README and metadata
+instead of using hard-coded repository-specific talking points.
 
 The spoken script must start with the topic itself, not meta explanations such
 as "the editor instructed...". Repository URLs and `owner/repo` identifiers are
-not read aloud; `easy-vibe` is spoken as `イージーバイブ`. Internal account
-names are normalized to `編集者` before display or speech.
+not read aloud. Internal account names are normalized to `編集者` before display
+or speech. Do not add repository-specific script logic; source interpretation
+belongs in the Claude prompt and generated script.
 
 The browser requests MP3 audio through `api.php?action=tts` and plays that audio.
 Therefore YouTube Live receives the same generated Kurage voice that the local
