@@ -1,0 +1,17 @@
+[Unit]
+Description=Kurage AI VTuber Radio application API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/kojima/work/airadio
+Environment=AIRADIO_APP_HOST=0.0.0.0
+Environment=AIRADIO_APP_PORT=18310
+Environment=AIRADIO_DISABLE_SERVER_TTS_PREFETCH=1
+ExecStart=/home/kojima/work/airadio/scripts/run_app_server.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

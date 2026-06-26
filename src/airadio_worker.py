@@ -70,6 +70,9 @@ def append_queue(items: list[dict[str, Any]]) -> None:
 
 
 def start_tts_prefetch(items: list[dict[str, Any]], reason: str) -> None:
+    if os.environ.get('AIRADIO_DISABLE_SERVER_TTS_PREFETCH') == '1':
+        log_event('tts_prefetch_skipped', reason=reason, mode='app_server')
+        return
     if not items or not TTS_PREFETCH_SCRIPT.exists():
         return
     payload_path = STORAGE / f'tts_prefetch_worker_{int(time.time())}_{os.getpid()}.json'
@@ -413,7 +416,10 @@ def collect_research(theme: str, instruction: str = '') -> dict[str, Any]:
     github_items = run_github_research(source_text)
     web_pages = run_url_research(source_text)
     x_query = research_query_from_theme(theme, github_items, web_pages)
-    x_result = run_x_search(x_query)
+    if github_items or web_pages:
+        x_result = {'ok': False, 'skipped': True, 'reason': 'primary_url_material_available'}
+    else:
+        x_result = run_x_search(x_query)
     return {
         'ok': bool(github_items) or bool(web_pages) or bool(x_result.get('ok')),
         'theme': theme,
