@@ -286,6 +286,30 @@ function airadio_theme_is_github_repo($input) {
     return preg_match('~^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\s|$)~', $text) === 1;
 }
 
+function airadio_spoken_theme_title($theme, $instruction = '') {
+    $source = trim((string)$instruction) !== '' ? (string)$instruction : (string)$theme;
+    $repoLabel = airadio_extract_github_repo_label($source);
+    if ($repoLabel === '' && preg_match('~([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)~', (string)$theme, $m)) {
+        $repoLabel = $m[1] . '/' . $m[2];
+    }
+    if ($repoLabel !== '') {
+        $parts = explode('/', $repoLabel, 2);
+        $repo = isset($parts[1]) ? preg_replace('/\.git$/i', '', $parts[1]) : $repoLabel;
+        $map = [
+            'easy-vibe' => 'イージーバイブ',
+            'open-llm-vtuber' => 'オープン エルエルエム ブイチューバー',
+            'aituber-onair' => 'エーアイチューバー オンエア',
+        ];
+        $key = strtolower($repo);
+        if (isset($map[$key])) { return $map[$key]; }
+        $repo = preg_replace('/[-_]+/', ' ', $repo);
+        return trim($repo) !== '' ? $repo : $repoLabel;
+    }
+    $spoken = preg_replace('~https?://[^\s「」『』"\'`<>]+~u', '', (string)$theme);
+    $spoken = preg_replace('/\s+/u', ' ', $spoken);
+    return trim($spoken) !== '' ? trim($spoken) : trim((string)$theme);
+}
+
 function airadio_default_theme_from_profile($profile) {
     $username = isset($profile['username']) ? trim((string)$profile['username']) : '';
     $description = isset($profile['description']) ? trim((string)$profile['description']) : '';
@@ -403,23 +427,45 @@ function airadio_seed_instruction_program($theme, $instruction, $guidance) {
     $now = time();
     $instruction = trim((string)$instruction);
     $guidance = trim((string)$guidance);
-    $texts = [
-        [
-            'title' => $theme . 'を始める',
-            'text' => 'ここからは、編集者の自由入力の指示を優先します。入力された指示は「' . $instruction . '」です。Kurageはこれを、' . $theme . 'として受け取りました。' . $guidance . 'プロフィール由来のいつもの話題には戻らず、この指示に沿って番組を組み立てます。GitHubリポジトリが含まれる場合は、裏側でREADMEとリポジトリ情報を読み、教材の中身に沿って話します。',
-            'source' => 'instruction-seed-opening',
-        ],
-        [
-            'title' => '今日の聞きどころ',
-            'text' => 'このテーマで最初に大切なのは、何を知れば一歩進めるのかをはっきりさせることです。Kurageは、言葉の意味、実際の使い方、つまずきやすい点、今日試せる小さな行動の順に整理します。リスナーは全部覚えなくて大丈夫です。自分の作業に使えそうな一文だけ拾ってください。',
-            'source' => 'instruction-seed-map',
-        ],
-        [
-            'title' => '最初の実践へ',
-            'text' => 'このあと裏側では、指定されたテーマに合わせて情報収集と台本生成を進めます。表のラジオでは、待ち時間を無音にせず、今のテーマに沿った導入を続けます。重要なのは、一般論ではなく、編集者が入力した指示から外れないことです。',
-            'source' => 'instruction-seed-practice',
-        ],
-    ];
+    $spoken = airadio_spoken_theme_title($theme, $instruction);
+    $isGithub = airadio_theme_is_github_repo($theme) || airadio_theme_is_github_repo($instruction);
+    if ($isGithub) {
+        $texts = [
+            [
+                'title' => $spoken . 'の核心',
+                'text' => $spoken . 'は、AI時代の開発を「コードを暗記する作業」から「作りたいものを言葉にして、AIと一緒に形にする学習」へ変える教材です。最初に見るべきポイントは、初心者が小さな成功体験から入り、プロトタイプ、フルスタック開発、AIネイティブな開発へ進めるように道筋が分かれていることです。',
+                'source' => 'instruction-seed-opening',
+            ],
+            [
+                'title' => '学習パスの見どころ',
+                'text' => 'この教材の聞きどころは、バイブコーディングを気分の話で終わらせず、会話、画面、データ、決済、公開までの実践に落としている点です。リスナーは、全部を覚えようとせず、自分の仕事で次に作りたい一機能へ置き換えて聞くと理解しやすくなります。',
+                'source' => 'instruction-seed-map',
+            ],
+            [
+                'title' => '最初の実践へ',
+                'text' => 'まずは、作りたい小さなアプリを一文で言うところから始めます。AIに全部任せるのではなく、入力欄を作る、保存する、表示を直す、公開する、というように一歩ずつ頼む。この往復が、バイブコーディングを実際の開発力に変えます。',
+                'source' => 'instruction-seed-practice',
+            ],
+        ];
+    } else {
+        $texts = [
+            [
+                'title' => $spoken . 'を始める',
+                'text' => 'ここからは' . $spoken . 'です。まず、なぜこのテーマが今の開発や発信に効くのかを整理し、次に具体的な使い方、つまずきやすい点、今日できる小さな実践へ進みます。',
+                'source' => 'instruction-seed-opening',
+            ],
+            [
+                'title' => '今日の聞きどころ',
+                'text' => '最初に大切なのは、何を知れば一歩進めるのかをはっきりさせることです。言葉の意味、実際の使い方、つまずきやすい点、今日試せる小さな行動の順に整理します。',
+                'source' => 'instruction-seed-map',
+            ],
+            [
+                'title' => '最初の実践へ',
+                'text' => 'このテーマは、聞いて終わりではなく、小さく試すことで身につきます。いまの自分の作業に置き換えるなら、どの一手をAIと一緒に進められるか。そこから見ていきます。',
+                'source' => 'instruction-seed-practice',
+            ],
+        ];
+    }
     $items = [];
     foreach ($texts as $i => $row) {
         $row['id'] = 'instruction-seed-' . $now . '-' . $i;

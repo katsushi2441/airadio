@@ -143,7 +143,11 @@ that material into the script prompt. X search remains supplemental.
 This prevents repository-based topics from becoming generic AI talk. For
 `easy-vibe`, the generated program should discuss the course concept, target
 learners, staged learning paths, practical projects, and usage caveats.
-Internal account names are normalized to `編集者` before display or speech.
+
+The spoken script must start with the topic itself, not meta explanations such
+as "the editor instructed...". Repository URLs and `owner/repo` identifiers are
+not read aloud; `easy-vibe` is spoken as `イージーバイブ`. Internal account
+names are normalized to `編集者` before display or speech.
 
 The browser requests MP3 audio through `api.php?action=tts` and plays that audio.
 Therefore YouTube Live receives the same generated Kurage voice that the local

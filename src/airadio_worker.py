@@ -468,11 +468,45 @@ def theme_guidance(theme: str) -> str:
 
 
 
+
+def spoken_repo_name(repo: str) -> str:
+    name = str(repo or '').split('/')[-1]
+    name = re.sub(r'\.git$', '', name, flags=re.I)
+    mapping = {
+        'easy-vibe': 'イージーバイブ',
+        'open-llm-vtuber': 'オープン エルエルエム ブイチューバー',
+        'aituber-onair': 'エーアイチューバー オンエア',
+    }
+    key = name.lower()
+    if key in mapping:
+        return mapping[key]
+    return re.sub(r'[-_]+', ' ', name).strip() or str(repo or '').strip()
+
+
+def sanitize_spoken_text(text: str, github_items: list[dict[str, Any]] | None = None) -> str:
+    text = re.sub(r'https?://[^\s「」『』"\'`<>]+', '', text or '')
+    text = text.replace('xb_bittensorさん', '編集者さん').replace('xb_bittensor', '編集者')
+    for item in github_items or []:
+        repo = str(item.get('repo') or '')
+        if not repo:
+            continue
+        spoken = spoken_repo_name(repo)
+        owner = repo.split('/')[0]
+        raw_name = repo.split('/')[-1]
+        patterns = [re.escape(repo), re.escape(owner + ' の ' + raw_name), re.escape(raw_name)]
+        for pattern in patterns:
+            text = re.sub(pattern, spoken, text, flags=re.I)
+    text = re.sub(r'プログラ[^ぁ-んァ-ヶ一-龠。、,.]{1,12}g', 'プログラミング', text)
+    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r'\s+([。、,.])', r'\1', text)
+    return text.strip()
+
 def github_fallback_segments(theme: str, github_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if not github_items:
         return []
     repo = github_items[0]
-    name = str(repo.get('repo') or theme)
+    raw_repo = str(repo.get('repo') or theme)
+    name = spoken_repo_name(raw_repo)
     desc = str(repo.get('description') or 'AI時代の学習教材')
     stars = int(repo.get('stars') or 0)
     license_name = str(repo.get('license') or '')
@@ -480,9 +514,9 @@ def github_fallback_segments(theme: str, github_items: list[dict[str, Any]]) -> 
     has_stage = 'Stage' in summary or 'stage' in summary.lower() or '学習' in summary
     star_text = f'GitHubで約{stars:,}スターを集めている' if stars else 'GitHubで公開されている'
     license_text = f'ライセンスは{license_name}です。' if license_name else 'ライセンスや再利用条件は、実際に使う前に確認しておきたい点です。'
-    if 'easy-vibe' in name.lower():
+    if 'easy-vibe' in raw_repo.lower():
         texts = [
-            f'ここからは{name}を、GitHubリポジトリそのものを教材として見ていきます。説明には「{desc}」とあり、中心にあるのは、話せればアプリを作れるというAI時代の開発観です。これは単なる流行語ではなく、初心者が最初の成果物まで進むための学習設計として見ると価値が分かります。',
+            f'{name}は、話せればアプリを作れるというAI時代の開発観を、初心者が実践できる学習コースに落とした教材です。説明には「{desc}」とありますが、見るべき核心は、知識を暗記する前に、小さな成果物を作りながら理解していく設計です。',
             f'{name}が面白いのは、{star_text}点です。READMEでは、完全な初心者、プロダクトマネージャー、学生、ジュニア開発者、そしてAIネイティブな開発者まで、対象者ごとに学習パスを分けています。つまり、バイブコーディングを感覚論ではなく、段階的な教育コースに落としているわけです。',
             '学習パスは、まず小さな成功体験から入り、次にアイデアをプロトタイプへ変え、さらにフルスタック開発へ進む流れです。ここが大事です。AIに丸投げするのではなく、目的を言葉にし、画面を作り、バックエンドや決済のような現実の部品へ接続していく順番があるからです。',
             '編集者がこの教材から学べる実践ポイントは、AIRadioやKurageの開発にもそのまま使えます。まず作りたい体験を言葉にする。次にAIに小さく実装させる。動作を見て、違和感を戻す。そしてログや手順を残す。この往復が、バイブコーディングを仕事の方法に変えます。',
@@ -604,7 +638,7 @@ GitHubリポジトリを主教材として扱うか: {'はい' if github_primary
 - 編集者の学びを、他のリスナーにも役立つ解説へ変換する。
 - 自由入力指示がある場合は、その文章の意図を最優先する。プロフィール起点の定番台本、Bittensor、Web3、収益化の話に勝手に戻らない。
 - 自由入力指示はフォーマットなしの自然文として扱い、「何について」「どのレベルで」「どう話してほしいか」を推測して台本化する。
-- GitHubリポジトリURLが入力された場合は、情報収集メモ内のgithub項目を一次資料として扱う。READMEの内容、対象読者、学習パス、特徴、ライセンスや注意点を具体的に話す。URL名だけを読み上げたり、一般的なバイブコーディング論へ薄めたりしない。
+- GitHubリポジトリURLが入力された場合は、情報収集メモ内のgithub項目を一次資料として扱う。READMEの内容、対象読者、学習パス、特徴、ライセンスや注意点を具体的に話す。URL、owner/repo、長い英数字識別子は読み上げない。easy-vibeは「イージーバイブ」と呼ぶ。一般的なバイブコーディング論へ薄めない。
 - GitHub主教材の場合、各segmentの角度は repository_overview, why_it_matters, learning_path, practical_use, caveats, editor_action のように、資料の中身に沿って分ける。
 - 1本あたり60〜120秒程度で読める長さ。
 - 同じ言い回し、同じ結論、同じブリッジトークは禁止。
@@ -625,6 +659,10 @@ GitHubリポジトリを主教材として扱うか: {'はい' if github_primary
         try:
             parsed = runner(prompt)
             out = normalize_segments(parsed, theme, provider, memory)
+            if github_primary:
+                for item in out:
+                    item['text'] = sanitize_spoken_text(str(item.get('text') or ''), github_items)
+                    item['title'] = sanitize_spoken_text(str(item.get('title') or ''), github_items)
             if len(out) >= 4:
                 if github_primary and len(out) < 6:
                     out.extend(github_fallback_segments(theme, github_items)[: 6 - len(out)])
@@ -662,7 +700,7 @@ def normalize_segments(parsed: dict[str, Any], theme: str, provider: str, memory
         if not isinstance(seg, dict):
             continue
         text = re.sub(r'\s+', ' ', str(seg.get('text') or '')).strip()
-        text = text.replace('xb_bittensorさん', '編集者さん').replace('xb_bittensor', '編集者')
+        text = sanitize_spoken_text(text)
         if len(text) < 120:
             continue
         if sum(1 for ch in text if '\u3040' <= ch <= '\u30ff' or '\u4e00' <= ch <= '\u9fff') < 60:
@@ -674,7 +712,7 @@ def normalize_segments(parsed: dict[str, Any], theme: str, provider: str, memory
         out.append({
             'id': f'{int(time.time())}-{provider}-{i}',
             'theme': theme,
-            'title': str(seg.get('title') or f'{theme} {i+1}').replace('xb_bittensor', '編集者'),
+            'title': sanitize_spoken_text(str(seg.get('title') or f'{theme} {i+1}')),
             'text': text,
             'source': str(seg.get('source') or provider),
             'created_at': time.strftime('%Y-%m-%dT%H:%M:%S%z'),

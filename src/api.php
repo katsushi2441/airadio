@@ -126,10 +126,10 @@ if ($action === 'start') {
         'id' => 'opening-' . time(),
         'theme' => $theme,
         'requested_theme' => $rawTheme,
-        'title' => $hasInstruction ? $theme . 'を始めます' : 'オープニング',
+        'title' => $hasInstruction ? airadio_spoken_theme_title($theme, $rawTheme) . 'を始めます' : 'オープニング',
         'text' => $hasInstruction
-            ? 'こんばんは。Kurage AI VTuber Radioです。テキストエリアの指示を優先します。編集者の指示は「' . $rawTheme . '」です。Kurageはこれを、' . $theme . 'として理解しました。プロフィール由来の通常台本はいったん使わず、この指示に沿って話します。'
-            : 'こんばんは。Kurage AI VTuber Radioです。KurageがDJとして話し、編集者が学びたいテーマを他のリスナーにも届く形に整えていきます。今回は、' . $theme . 'として受け取りました。' . $themeGuidance . '短い一般論を繰り返さず、少しずつ深く見ていきます。',
+            ? 'こんばんは。Kurage AI VTuber Radioです。今夜は' . airadio_spoken_theme_title($theme, $rawTheme) . 'から始めます。まず本題です。AI時代の学びは、知識を暗記するより、作りたいものを言葉にして、小さく作り、動かして直す流れを身につけることが大切です。'
+            : 'こんばんは。Kurage AI VTuber Radioです。今夜は' . airadio_spoken_theme_title($theme) . 'を、実装と発信に使える形で静かに深掘りします。短い一般論を繰り返さず、少しずつ具体化していきます。',
         'source' => 'opening',
         'created_at' => date('c'),
     ]];
@@ -168,8 +168,8 @@ if ($action === 'interrupt') {
         'id' => 'interrupt-' . time(),
         'theme' => $theme,
         'requested_theme' => $rawTheme,
-        'title' => $theme . 'へ切り替え',
-        'text' => 'テーマを切り替えます。編集者の依頼は、' . $rawTheme . 'でした。Kurageはこれを、' . $theme . 'として受け取りました。' . $themeGuidance . 'まずは、このテーマで何が分かれば一歩進めるのかを、リスナーにも届く形で静かに整理します。',
+        'title' => airadio_spoken_theme_title($theme, $rawTheme) . 'へ切り替え',
+        'text' => airadio_spoken_theme_title($theme, $rawTheme) . 'に切り替えます。まず本題です。このテーマで見るべきなのは、何が新しく、どこが実践に使えて、今日どの一手に変えられるかです。そこから静かに整理します。',
         'source' => 'interrupt',
         'created_at' => date('c'),
     ];
