@@ -391,6 +391,7 @@ async def api_action(action: str, request: Request, x_airadio_auth: str | None =
     if action == 'stop':
         require_admin(auth)
         write_current(None)
+        write_json(QUEUE, {'items': [], 'updated_at': now_iso()})
         return {'ok': True, 'state': update_state({'status': 'idle', 'loop_state': 'stopped', 'now_talking': '', 'research_status': 'idle'})}
     if action == 'interrupt':
         require_admin(auth)
