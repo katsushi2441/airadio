@@ -101,9 +101,11 @@ if ($action === 'comment') {
 
 if ($action === 'start') {
     require_admin($auth);
-    $theme = trim((string)(isset($input['theme']) ? $input['theme'] : ''));
+    $rawTheme = trim((string)(isset($input['theme']) ? $input['theme'] : ''));
+    $theme = airadio_normalize_theme_request($rawTheme);
     $profile = airadio_profile_from_session();
     if ($theme === '') { $theme = airadio_default_theme_from_profile($profile); }
+    $themeGuidance = airadio_theme_guidance($theme);
     $hours = max(1, min(6, (int)(isset($input['duration_hours']) ? $input['duration_hours'] : 1)));
     $now = time();
     airadio_reset_program_memory();
@@ -116,12 +118,14 @@ if ($action === 'start') {
         'loop_state' => 'speaking',
         'research_status' => 'queued',
         'broadcaster' => isset($auth['session_user']) ? $auth['session_user'] : AIRADIO_ALLOWED_USER,
+        'requested_theme' => $rawTheme,
+        'theme_guidance' => $themeGuidance,
     ]);
     $items = [[
         'id' => 'opening-' . time(),
         'theme' => $theme,
         'title' => 'オープニング',
-        'text' => 'こんばんは。Kurage AI VTuber Radioです。KurageがDJとして話し、編集者が学びたいテーマを他のリスナーにも届く形に整えていきます。最初はプロフィールに合わせて、' . $theme . 'という流れから始めます。短い一般論を繰り返さず、実装、情報収集、収益化、発信の順に、少しずつ深く見ていきます。',
+        'text' => 'こんばんは。Kurage AI VTuber Radioです。KurageがDJとして話し、編集者が学びたいテーマを他のリスナーにも届く形に整えていきます。今回は、' . $theme . 'として受け取りました。' . $themeGuidance . '短い一般論を繰り返さず、少しずつ深く見ていきます。',
         'source' => 'opening',
         'created_at' => date('c'),
     ]];
@@ -142,21 +146,24 @@ if ($action === 'stop') {
 
 if ($action === 'interrupt') {
     require_admin($auth);
-    $theme = trim((string)(isset($input['theme']) ? $input['theme'] : ''));
+    $rawTheme = trim((string)(isset($input['theme']) ? $input['theme'] : ''));
+    $theme = airadio_normalize_theme_request($rawTheme);
     if ($theme === '') { bad('theme_required'); }
+    $themeGuidance = airadio_theme_guidance($theme);
     $queue = airadio_queue();
     $interruptItem = [
         'id' => 'interrupt-' . time(),
         'theme' => $theme,
-        'title' => 'テーマ割り込み',
-        'text' => 'テーマを切り替えます。ここからは、' . $theme . 'について、静かに考えていきます。すぐに結論を急がず、背景、論点、実践の順に、ゆっくり眺めていきましょう。裏側では関連情報の収集を始めています。',
+        'requested_theme' => $rawTheme,
+        'title' => $theme . 'へ切り替え',
+        'text' => 'テーマを切り替えます。編集者の依頼は、' . $rawTheme . 'でした。Kurageはこれを、' . $theme . 'として受け取りました。' . $themeGuidance . 'まずは、このテーマで何が分かれば一歩進めるのかを、リスナーにも届く形で静かに整理します。',
         'source' => 'interrupt',
         'created_at' => date('c'),
     ];
     array_unshift($queue['items'], $interruptItem);
     airadio_write_json(AIRADIO_QUEUE_FILE, $queue);
     $ttsPid = airadio_start_tts_prefetch([$interruptItem], 'interrupt');
-    $state = airadio_update_state(['theme' => $theme, 'research_status' => 'queued', 'loop_state' => 'theme_interrupt']);
+    $state = airadio_update_state(['theme' => $theme, 'requested_theme' => $rawTheme, 'theme_guidance' => $themeGuidance, 'research_status' => 'queued', 'loop_state' => 'theme_interrupt']);
     $pid = airadio_start_worker($theme, airadio_profile_from_session(), 'interrupt');
     ok(['state' => $state, 'worker_pid' => $pid, 'tts_prefetch_pid' => $ttsPid, 'queue' => $queue]);
 }

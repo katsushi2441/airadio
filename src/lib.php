@@ -283,6 +283,39 @@ function airadio_default_theme_from_profile($profile) {
     return '編集者が学びたい、AI Agent、バイブコーディング、分散AI、Web3収益化を静かに深掘りする';
 }
 
+function airadio_normalize_theme_request($input) {
+    $text = trim((string)$input);
+    if ($text === '') { return ''; }
+    $text = preg_replace('/[「」『』"\'`]/u', '', $text);
+    $text = preg_replace('/\s+/u', ' ', $text);
+    $patterns = [
+        '/^(.+?)(?:という|っていう|といった)?テーマで(?:話して|話す|解説して|教えて|お願いします|ください)?[。.!！]*$/u',
+        '/^(.+?)(?:を|について)(?:テーマにして|話して|解説して|教えて|お願いします|ください)[。.!！]*$/u',
+        '/^(.+?)(?:を|について)(?:初心者向けに|入門向けに)?(?:話して|解説して|教えて|お願いします|ください)[。.!！]*$/u',
+    ];
+    foreach ($patterns as $pattern) {
+        if (preg_match($pattern, $text, $m) && trim($m[1]) !== '') {
+            $text = trim($m[1]);
+            break;
+        }
+    }
+    $text = preg_replace('/(?:という|っていう|といった)?テーマ$/u', '', $text);
+    $text = preg_replace('/(?:を|について)$/u', '', $text);
+    $text = preg_replace('/^[\s。、.!！?]+|[\s。、.!！?]+$/u', '', $text);
+    return $text !== '' ? $text : trim((string)$input);
+}
+
+function airadio_theme_guidance($theme) {
+    $theme = (string)$theme;
+    if (preg_match('/入門|初心者|初級|はじめて|基礎/u', $theme)) {
+        return '初心者向けに、専門用語を短く説明し、なぜ必要か、最初に何をすればよいか、つまずきやすい点、今日できる小さな実践の順に話す。上級者向けの抽象論や収益化の話へ急がない。';
+    }
+    if (preg_match('/応用|実践|収益|稼/u', $theme)) {
+        return '実践者向けに、具体的な手順、ツール選択、検証方法、失敗時の立て直し、収益化への接続を中心に話す。';
+    }
+    return '入力されたテーマの意図を保ち、一般論に薄めず、具体例と実装・発信・検証の観点を入れて話す。';
+}
+
 function airadio_seed_profile_program($theme, $profile) {
     $username = isset($profile['username']) && $profile['username'] !== '' ? $profile['username'] : 'xb_bittensor';
     $now = time();

@@ -95,10 +95,15 @@ The broadcaster account can type a theme such as:
 
 ```text
 バイブコーディングをテーマにして
+バイブコーディング入門編というテーマで話して
 ```
 
 The UI immediately queues a short transition segment and starts background
-research for that theme. The radio keeps talking while the new script is built.
+research for that theme. Natural requests such as `...というテーマで話して`
+are normalized into the actual topic before script generation. Beginner themes
+such as `入門編` or `初心者向け` produce scripts that explain terms, first steps,
+and common pitfalls instead of jumping into advanced monetization talk. The radio
+keeps talking while the new script is built.
 
 ## Duration
 

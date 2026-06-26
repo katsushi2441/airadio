@@ -277,16 +277,52 @@ def parse_json_object(text: str) -> dict[str, Any]:
     return {}
 
 
+def normalize_theme_request(text: str) -> str:
+    text = re.sub(r'[「」『』"\'`]', '', str(text or '').strip())
+    text = re.sub(r'\s+', ' ', text)
+    patterns = [
+        r'^(.+?)(?:という|っていう|といった)?テーマで(?:話して|話す|解説して|教えて|お願いします|ください)?[。.!！]*$',
+        r'^(.+?)(?:を|について)(?:テーマにして|話して|解説して|教えて|お願いします|ください)[。.!！]*$',
+        r'^(.+?)(?:を|について)(?:初心者向けに|入門向けに)?(?:話して|解説して|教えて|お願いします|ください)[。.!！]*$',
+    ]
+    for pattern in patterns:
+        match = re.match(pattern, text)
+        if match and match.group(1).strip():
+            text = match.group(1).strip()
+            break
+    text = re.sub(r'(?:という|っていう|といった)?テーマ$', '', text).strip()
+    text = re.sub(r'(?:を|について)$', '', text).strip()
+    return text.strip('。、.!！? ') or str(text or '').strip()
+
+
+def theme_guidance(theme: str) -> str:
+    if re.search(r'入門|初心者|初級|はじめて|基礎', theme):
+        return 'このテーマは入門編として扱う。専門用語を短く説明し、なぜ必要か、最初に何をすればよいか、つまずきやすい点、今日できる小さな実践の順に話す。上級者向けの抽象論や収益化の話へ急がない。'
+    if re.search(r'応用|実践|収益|稼', theme):
+        return 'このテーマは実践編として扱う。具体的な手順、ツール選択、検証方法、失敗時の立て直し、収益化への接続を中心に話す。'
+    return '入力されたテーマの意図を保ち、一般論に薄めず、具体例と実装・発信・検証の観点を入れて話す。'
+
+
 def fallback_segments(theme: str) -> list[dict[str, Any]]:
     memory = load_memory()
-    base = [
-        f'ここからは{theme}を、AIエージェントを実際に動かす人の目線で見ていきます。今日はまず、情報収集、判断、実行の三つを分けて考えます。',
-        'KurageがDJとして、いま見えている論点をゆっくり整理します。編集者もリスナーも、全部覚えようとしなくて大丈夫です。使えそうな一文だけ拾ってください。',
-        f'{theme}で大切なのは、流行語を追うことではなく、明日の作業が一つ軽くなるかどうかです。小さな自動化を積み重ねると、やがて仕事の流れそのものが変わります。',
-        '次の観点は、ツール選びです。Claude Code、Codex、ローカルLLM、browser-useのような操作エージェントは、それぞれ得意な待ち時間と失敗の仕方が違います。',
-        'AIに仕事を任せるときは、成果物だけではなく、途中のログ、判断理由、やり直し方を残すことが価値になります。これは後から人に渡せる知識になるからです。',
-        'ここまでを一度まとめます。テーマを小さく切り、AIに調べさせ、台本にし、実行し、ログを残す。この循環が、編集者向けのAI思考ラジオの基本形です。',
-    ]
+    if re.search(r'入門|初心者|初級|はじめて|基礎', theme):
+        base = [
+            f'ここからは{theme}として、はじめての人にも分かる順番で話します。バイブコーディングは、雰囲気でコードを書くことではありません。作りたいものを言葉にし、AIに実装させ、動かして確かめ、違和感をまた言葉で返す開発の往復です。',
+            '最初に大事なのは、完璧なプロンプトではなく、小さく頼むことです。たとえば、ログイン画面を全部作って、ではなく、まず入力欄とボタンだけ作って、次に保存、次にエラー表示、というように分けます。',
+            '初心者がつまずきやすいのは、AIの返答をそのまま信じるところです。動いたか、画面で見たか、エラーは出ていないか、Gitに何が変わったか。この確認をセットにすると、バイブコーディングは急に実用的になります。',
+            '使う道具は、最初は多くなくて大丈夫です。ブラウザで確認できる小さなWebページ、Gitで差分を見る習慣、そしてAIに直してほしい点を一文で伝えること。この三つが入門編の土台です。',
+            '今日できる小さな実践は、ひとつの画面を決めて、ここをもう少し分かりやすくして、とAIに頼むことです。そのあと、どこが変わったかを自分の目で見る。ここからAIと一緒に作る感覚が育ちます。',
+            'まとめると、バイブコーディング入門で覚えることは、AIに任せることではなく、AIとの往復を設計することです。目的を言う、作らせる、見る、直す。この四拍子を小さく回すところから始めましょう。',
+        ]
+    else:
+        base = [
+            f'ここからは{theme}を、AIエージェントを実際に動かす人の目線で見ていきます。今日はまず、情報収集、判断、実行の三つを分けて考えます。',
+            'KurageがDJとして、いま見えている論点をゆっくり整理します。編集者もリスナーも、全部覚えようとしなくて大丈夫です。使えそうな一文だけ拾ってください。',
+            f'{theme}で大切なのは、流行語を追うことではなく、明日の作業が一つ軽くなるかどうかです。小さな自動化を積み重ねると、やがて仕事の流れそのものが変わります。',
+            '次の観点は、ツール選びです。Claude Code、Codex、ローカルLLM、browser-useのような操作エージェントは、それぞれ得意な待ち時間と失敗の仕方が違います。',
+            'AIに仕事を任せるときは、成果物だけではなく、途中のログ、判断理由、やり直し方を残すことが価値になります。これは後から人に渡せる知識になるからです。',
+            'ここまでを一度まとめます。テーマを小さく切り、AIに調べさせ、台本にし、実行し、ログを残す。この循環が、編集者向けのAI思考ラジオの基本形です。',
+        ]
     items = []
     for i, text in enumerate(base):
         if is_duplicate_text(text, memory):
@@ -332,6 +368,7 @@ def bridge_segments(theme: str) -> list[dict[str, Any]]:
 
 def build_segments(theme: str, profile: dict[str, Any], research: dict[str, Any]) -> list[dict[str, Any]]:
     memory = load_memory()
+    guidance = theme_guidance(theme)
     profile_text = json.dumps(enrich_profile(profile), ensure_ascii=False)[:1800]
     research_text = json.dumps(research, ensure_ascii=False)[:5000]
     memory_text = json.dumps({
@@ -344,6 +381,7 @@ KurageがDJで、編集者は聞き手であり番組を整える人です。ロ
 編集者のXプロフィールに合うテーマから入り、AI、Bittensor、分散AI、Web3、バイブコーディング、Claude Code/Codex、AI Agent、収益化の文脈を自然に接続してください。
 
 テーマ: {theme}
+テーマ解釈: {guidance}
 聞き手プロフィール: {profile_text}
 情報収集メモ: {research_text}
 直近で話した内容（絶対に繰り返さない）: {memory_text}
@@ -356,6 +394,7 @@ KurageがDJで、編集者は聞き手であり番組を整える人です。ロ
 - 同じ言い回し、同じ結論、同じブリッジトークは禁止。
 - 抽象論だけで終わらせない。具体的なツール、実装、収益化、発信、検証、失敗回避を入れる。
 - 眠りを促すラジオなので穏やか。ただし中身は濃く、薄い一般論にしない。
+- テーマ解釈を最優先する。たとえば「入門編」なら、初めて聞く人が理解できる順番、用語説明、最初の実践、つまずき回避を中心にする。
 - 各segmentは別の角度にする: profile_hook, current_signal, tool_workflow, monetization, implementation_note, closing_question。
 - 「裏側で情報収集しています」「呼吸を整えましょう」のような待ち文句を繰り返さない。
 - JSONだけで返す。shape: {{"segments":[{{"title":"...","text":"...","source":"..."}}]}}
@@ -428,7 +467,7 @@ def main() -> None:
     parser.add_argument('--payload', required=True)
     args = parser.parse_args()
     payload = read_json(Path(args.payload), {})
-    theme = str(payload.get('theme') or 'AI思考とバイブコーディング')
+    theme = normalize_theme_request(str(payload.get('theme') or 'AI思考とバイブコーディング'))
     profile = payload.get('profile') if isinstance(payload.get('profile'), dict) else {}
 
     if not acquire_lock():
