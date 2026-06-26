@@ -271,6 +271,21 @@ function airadio_fetch_x_profile($username) {
     return $profile;
 }
 
+function airadio_extract_github_repo_label($input) {
+    $text = (string)$input;
+    if (preg_match('~https?://github\.com/([^/\s]+)/([^/\s?#]+)~i', $text, $m)) {
+        $repo = preg_replace('/\.git$/i', '', $m[2]);
+        return $m[1] . '/' . $repo;
+    }
+    return '';
+}
+
+function airadio_theme_is_github_repo($input) {
+    $text = trim((string)$input);
+    if (airadio_extract_github_repo_label($text) !== '') { return true; }
+    return preg_match('~^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\s|$)~', $text) === 1;
+}
+
 function airadio_default_theme_from_profile($profile) {
     $username = isset($profile['username']) ? trim((string)$profile['username']) : '';
     $description = isset($profile['description']) ? trim((string)$profile['description']) : '';
@@ -286,6 +301,7 @@ function airadio_default_theme_from_profile($profile) {
 function airadio_normalize_theme_request($input) {
     $text = trim((string)$input);
     if ($text === '') { return ''; }
+    $repoLabel = airadio_extract_github_repo_label($text);
     $text = preg_replace('/[「」『』"\'`]/u', '', $text);
     $text = preg_replace('/\s+/u', ' ', $text);
     $patterns = [
@@ -302,6 +318,14 @@ function airadio_normalize_theme_request($input) {
     $text = preg_replace('/(?:という|っていう|といった)?テーマ$/u', '', $text);
     $text = preg_replace('/(?:を|について)$/u', '', $text);
     $text = preg_replace('/^[\s。、.!！?]+|[\s。、.!！?]+$/u', '', $text);
+    if ($repoLabel !== '') {
+        if ($text === '' || preg_match('#^https?://github\.com/#i', $text)) {
+            return $repoLabel . ' の教材内容';
+        }
+        if (strpos($text, $repoLabel) === false) {
+            return $repoLabel . ' の教材内容: ' . $text;
+        }
+    }
     return $text !== '' ? $text : trim((string)$input);
 }
 
@@ -312,6 +336,9 @@ function airadio_theme_guidance($theme) {
     }
     if (preg_match('/応用|実践|収益|稼/u', $theme)) {
         return '実践者向けに、具体的な手順、ツール選択、検証方法、失敗時の立て直し、収益化への接続を中心に話す。';
+    }
+    if (airadio_theme_is_github_repo($theme)) {
+        return 'GitHubリポジトリを一次資料として扱い、READMEの内容、対象読者、学習パス、使いどころ、注意点を具体的に話す。URL名だけで済ませず、教材の中身に沿って構成する。';
     }
     return '入力されたテーマの意図を保ち、一般論に薄めず、具体例と実装・発信・検証の観点を入れて話す。';
 }
@@ -379,7 +406,7 @@ function airadio_seed_instruction_program($theme, $instruction, $guidance) {
     $texts = [
         [
             'title' => $theme . 'を始める',
-            'text' => 'ここからは、編集者の自由入力の指示を優先します。入力された指示は「' . $instruction . '」です。Kurageはこれを、' . $theme . 'として受け取りました。' . $guidance . 'プロフィール由来のいつもの話題には戻らず、この指示に沿って番組を組み立てます。',
+            'text' => 'ここからは、編集者の自由入力の指示を優先します。入力された指示は「' . $instruction . '」です。Kurageはこれを、' . $theme . 'として受け取りました。' . $guidance . 'プロフィール由来のいつもの話題には戻らず、この指示に沿って番組を組み立てます。GitHubリポジトリが含まれる場合は、裏側でREADMEとリポジトリ情報を読み、教材の中身に沿って話します。',
             'source' => 'instruction-seed-opening',
         ],
         [

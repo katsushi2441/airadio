@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+import urllib.error
 from pathlib import Path
 from typing import Any, Optional
 
@@ -181,6 +182,169 @@ def acquire_lock() -> bool:
     return True
 
 
+
+def extract_urls(text: str) -> list[str]:
+    urls = re.findall(r'https?://[^\s「」『』"\'`<>]+', text or '')
+    cleaned = []
+    for url in urls:
+        url = url.rstrip('。、.!！?)]）')
+        if url and url not in cleaned:
+            cleaned.append(url)
+    return cleaned[:5]
+
+
+def extract_github_repos(text: str) -> list[str]:
+    repos = []
+    for url in extract_urls(text):
+        match = re.search(r'https?://github\.com/([^/\s]+)/([^/\s?#]+)', url)
+        if not match:
+            continue
+        owner = match.group(1).strip()
+        repo = re.sub(r'\.git$', '', match.group(2).strip())
+        if owner and repo and repo not in {'issues', 'pulls', 'tree', 'blob'}:
+            name = f'{owner}/{repo}'
+            if name not in repos:
+                repos.append(name)
+    return repos[:3]
+
+
+def http_get_text(url: str, timeout: int = 20, accept: str = 'text/plain') -> tuple[int, str]:
+    req = urllib.request.Request(
+        url,
+        headers={
+            'User-Agent': 'KurageAIRadio/0.1',
+            'Accept': accept,
+        },
+        method='GET',
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as res:
+            body = res.read(600_000).decode('utf-8', errors='replace')
+            return int(getattr(res, 'status', 200)), body
+    except urllib.error.HTTPError as exc:
+        body = exc.read(80_000).decode('utf-8', errors='replace') if exc.fp else ''
+        return int(exc.code), body
+
+
+def strip_markdown_noise(text: str) -> str:
+    text = re.sub(r'<!--.*?-->', ' ', text or '', flags=re.S)
+    text = re.sub(r'<[^>]+>', ' ', text)
+    text = re.sub(r'!\[[^\]]*\]\([^)]*\)', ' ', text)
+    text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'\1 (\2)', text)
+    text = re.sub(r'[`*_#>|~]+', ' ', text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = re.sub(r'[ \t]+', ' ', text)
+    return text.strip()
+
+
+def summarize_readme_locally(readme: str, limit: int = 3600) -> str:
+    clean = strip_markdown_noise(readme)
+    lines = []
+    keep_next = False
+    for raw in clean.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        low = line.lower()
+        important = (
+            keep_next
+            or any(key in low for key in ['why', 'who this is for', 'learning paths', 'study suggestions', 'run locally', 'stage', 'beginner', 'advanced', 'vibe', 'ai era'])
+            or re.match(r'^(want|need|easy-vibe|complete beginners|product managers|students|junior|mid-level|best for|what you will learn|what you will get)', line, re.I)
+        )
+        if important:
+            lines.append(line)
+            keep_next = len(line) < 80 and len(lines) < 80
+        elif len(lines) < 14 and len(line) > 30:
+            lines.append(line)
+        if sum(len(x) for x in lines) > limit:
+            break
+    return '\n'.join(lines)[:limit]
+
+
+def fetch_github_repo(repo: str) -> dict[str, Any]:
+    api_url = f'https://api.github.com/repos/{repo}'
+    meta_status, meta_raw = http_get_text(api_url, timeout=18, accept='application/vnd.github+json')
+    meta: dict[str, Any] = {}
+    if meta_status < 400:
+        try:
+            parsed = json.loads(meta_raw)
+            if isinstance(parsed, dict):
+                meta = parsed
+        except Exception:
+            meta = {}
+    branch = str(meta.get('default_branch') or 'main')
+    readme = ''
+    readme_status = 0
+    candidates = [
+        f'https://raw.githubusercontent.com/{repo}/{branch}/README.md',
+        f'https://raw.githubusercontent.com/{repo}/{branch}/docs-readme/ja-JP/README.md',
+        f'https://raw.githubusercontent.com/{repo}/{branch}/docs-readme/zh-CN/README.md',
+    ]
+    for url in candidates:
+        readme_status, body = http_get_text(url, timeout=20)
+        if readme_status < 400 and len(body.strip()) > 200:
+            readme = body
+            break
+    return {
+        'type': 'github_repo',
+        'ok': bool(meta or readme),
+        'repo': repo,
+        'url': f'https://github.com/{repo}',
+        'description': str(meta.get('description') or ''),
+        'stars': int(meta.get('stargazers_count') or 0),
+        'language': str(meta.get('language') or ''),
+        'default_branch': branch,
+        'license': ((meta.get('license') or {}).get('spdx_id') if isinstance(meta.get('license'), dict) else '') or '',
+        'readme_summary': summarize_readme_locally(readme),
+        'readme_excerpt': strip_markdown_noise(readme)[:5000],
+        'fetched_at': time.strftime('%Y-%m-%dT%H:%M:%S%z'),
+    }
+
+
+def run_github_research(text: str) -> list[dict[str, Any]]:
+    results = []
+    for repo in extract_github_repos(text):
+        try:
+            results.append(fetch_github_repo(repo))
+        except Exception as exc:
+            results.append({'type': 'github_repo', 'ok': False, 'repo': repo, 'url': f'https://github.com/{repo}', 'error': str(exc)})
+    return results
+
+
+def research_query_from_theme(theme: str, github_items: list[dict[str, Any]]) -> str:
+    if github_items:
+        repo = str(github_items[0].get('repo') or '')
+        desc = str(github_items[0].get('description') or '')
+        summary = str(github_items[0].get('readme_summary') or '')
+        words = re.findall(r'[A-Za-z][A-Za-z0-9_-]{2,}|[\u3040-\u30ff\u3400-\u9fff]{2,}', f'{repo} {desc} {summary}')
+        picked = []
+        for word in words:
+            if word.lower() in {'https', 'github', 'com', 'readme', 'assets', 'img', 'width'}:
+                continue
+            if word not in picked:
+                picked.append(word)
+            if len(picked) >= 8:
+                break
+        if picked:
+            return ' '.join(picked)
+    return theme
+
+
+def collect_research(theme: str, instruction: str = '') -> dict[str, Any]:
+    source_text = f'{instruction}\n{theme}'
+    github_items = run_github_research(source_text)
+    x_query = research_query_from_theme(theme, github_items)
+    x_result = run_x_search(x_query)
+    return {
+        'ok': bool(github_items) or bool(x_result.get('ok')),
+        'theme': theme,
+        'instruction': instruction,
+        'github': github_items,
+        'x_query': x_query,
+        'x': x_result,
+        'notes': 'GitHub URLs are treated as primary source material; X search is supplemental signal only.',
+    }
+
 def run_x_search(theme: str) -> dict[str, Any]:
     if os.environ.get('AIRADIO_DISABLE_BROWSER_RESEARCH') == '1':
         return {'ok': False, 'skipped': True, 'reason': 'AIRADIO_DISABLE_BROWSER_RESEARCH=1'}
@@ -303,6 +467,47 @@ def theme_guidance(theme: str) -> str:
     return '入力されたテーマの意図を保ち、一般論に薄めず、具体例と実装・発信・検証の観点を入れて話す。'
 
 
+
+def github_fallback_segments(theme: str, github_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not github_items:
+        return []
+    repo = github_items[0]
+    name = str(repo.get('repo') or theme)
+    desc = str(repo.get('description') or 'AI時代の学習教材')
+    stars = int(repo.get('stars') or 0)
+    license_name = str(repo.get('license') or '')
+    summary = str(repo.get('readme_summary') or repo.get('readme_excerpt') or '')
+    has_stage = 'Stage' in summary or 'stage' in summary.lower() or '学習' in summary
+    star_text = f'GitHubで約{stars:,}スターを集めている' if stars else 'GitHubで公開されている'
+    license_text = f'ライセンスは{license_name}です。' if license_name else 'ライセンスや再利用条件は、実際に使う前に確認しておきたい点です。'
+    if 'easy-vibe' in name.lower():
+        texts = [
+            f'ここからは{name}を、GitHubリポジトリそのものを教材として見ていきます。説明には「{desc}」とあり、中心にあるのは、話せればアプリを作れるというAI時代の開発観です。これは単なる流行語ではなく、初心者が最初の成果物まで進むための学習設計として見ると価値が分かります。',
+            f'{name}が面白いのは、{star_text}点です。READMEでは、完全な初心者、プロダクトマネージャー、学生、ジュニア開発者、そしてAIネイティブな開発者まで、対象者ごとに学習パスを分けています。つまり、バイブコーディングを感覚論ではなく、段階的な教育コースに落としているわけです。',
+            '学習パスは、まず小さな成功体験から入り、次にアイデアをプロトタイプへ変え、さらにフルスタック開発へ進む流れです。ここが大事です。AIに丸投げするのではなく、目的を言葉にし、画面を作り、バックエンドや決済のような現実の部品へ接続していく順番があるからです。',
+            '編集者がこの教材から学べる実践ポイントは、AIRadioやKurageの開発にもそのまま使えます。まず作りたい体験を言葉にする。次にAIに小さく実装させる。動作を見て、違和感を戻す。そしてログや手順を残す。この往復が、バイブコーディングを仕事の方法に変えます。',
+            f'注意点もあります。{license_text}また、多言語教材や派手なデモを見るだけで満足すると、実装力にはつながりません。自分のプロジェクトで一画面、一機能、一投稿のように、小さく試すところまで持っていく必要があります。',
+            f'まとめると、{name}はバイブコーディングを「なんとなくAIに頼む」から、「話す、作る、確認する、直す」という学習ループへ変える教材です。今夜の編集者への問いは一つです。この教材の考え方を使って、明日どの小さな機能をAIと一緒に作るか。そこから始めましょう。',
+        ]
+    else:
+        texts = [
+            f'ここからは{name}を、GitHubリポジトリを一次資料として見ていきます。説明は「{desc}」です。まず、何を解決するためのリポジトリなのか、誰に向いているのかを静かに整理します。',
+            f'{name}は{star_text}公開プロジェクトです。スター数は万能ではありませんが、関心の強さや学習価値を見る入口になります。READMEの構成から、作者が何を最短で伝えたいのかを読み取ることができます。',
+            '実務で見るべき点は、インストール手順、サンプル、対象読者、拡張方法、そしてライセンスです。AIに調べさせるだけではなく、自分のプロダクトに取り込める部分と、参考に留める部分を分けることが大切です。',
+            f'{license_text}OSSを使うときは、商用利用、改変、再配布、クレジット表記の条件を先に見ます。ここを曖昧にすると、あとでプロダクト化するときに詰まりやすくなります。',
+            '編集者が次にやることは、READMEを読むだけではなく、ひとつのユースケースへ翻訳することです。自分なら、この機能をKurageのどこに接続するか。どの作業を楽にするか。そこまで落とすと、情報収集が実装に変わります。',
+            f'まとめると、{name}はURLではなく、設計思想、実装部品、学習導線のまとまりとして扱うべき資料です。Kurageはこの一次情報をもとに、静かなラジオとして、実装に使える形へほどいていきます。',
+        ]
+    now = int(time.time())
+    return [{
+        'id': f'github-fallback-{now}-{i}',
+        'theme': theme,
+        'title': f'{name} {i + 1}',
+        'text': text,
+        'source': 'github-fallback',
+        'created_at': time.strftime('%Y-%m-%dT%H:%M:%S%z'),
+    } for i, text in enumerate(texts)]
+
 def fallback_segments(theme: str) -> list[dict[str, Any]]:
     memory = load_memory()
     if re.search(r'入門|初心者|初級|はじめて|基礎', theme):
@@ -370,7 +575,9 @@ def build_segments(theme: str, profile: dict[str, Any], research: dict[str, Any]
     memory = load_memory()
     guidance = theme_guidance(theme)
     profile_text = json.dumps(enrich_profile(profile), ensure_ascii=False)[:1800]
-    research_text = json.dumps(research, ensure_ascii=False)[:5000]
+    research_text = json.dumps(research, ensure_ascii=False)[:9000]
+    github_items = research.get('github') if isinstance(research, dict) else []
+    github_primary = bool(github_items)
     memory_text = json.dumps({
         'recent_topics': memory.get('topics', [])[-24:],
         'recent_texts': memory.get('recent_texts', [])[-10:],
@@ -383,6 +590,7 @@ KurageがDJで、編集者は聞き手であり番組を整える人です。ロ
 テーマ: {theme}
 編集者の自由入力指示: {instruction or 'なし'}
 プロフィール台本を無視するか: {'はい' if ignore_profile_script else 'いいえ'}
+GitHubリポジトリを主教材として扱うか: {'はい' if github_primary else 'いいえ'}
 テーマ解釈: {guidance}
 聞き手プロフィール: {profile_text}
 情報収集メモ: {research_text}
@@ -391,9 +599,13 @@ KurageがDJで、編集者は聞き手であり番組を整える人です。ロ
 要件:
 - 日本語。
 - Kurageが編集者とリスナーへ話しかける口調。
+- 内部アカウント名やユーザーIDは読み上げない。xb_bittensorのような名前は必ず「編集者」と呼ぶ。
+- 英語の長い言い回しを混ぜず、自然な日本語で説明する。固有名詞以外は日本語にする。
 - 編集者の学びを、他のリスナーにも役立つ解説へ変換する。
 - 自由入力指示がある場合は、その文章の意図を最優先する。プロフィール起点の定番台本、Bittensor、Web3、収益化の話に勝手に戻らない。
 - 自由入力指示はフォーマットなしの自然文として扱い、「何について」「どのレベルで」「どう話してほしいか」を推測して台本化する。
+- GitHubリポジトリURLが入力された場合は、情報収集メモ内のgithub項目を一次資料として扱う。READMEの内容、対象読者、学習パス、特徴、ライセンスや注意点を具体的に話す。URL名だけを読み上げたり、一般的なバイブコーディング論へ薄めたりしない。
+- GitHub主教材の場合、各segmentの角度は repository_overview, why_it_matters, learning_path, practical_use, caveats, editor_action のように、資料の中身に沿って分ける。
 - 1本あたり60〜120秒程度で読める長さ。
 - 同じ言い回し、同じ結論、同じブリッジトークは禁止。
 - 抽象論だけで終わらせない。具体的なツール、実装、収益化、発信、検証、失敗回避を入れる。
@@ -414,12 +626,15 @@ KurageがDJで、編集者は聞き手であり番組を整える人です。ロ
             parsed = runner(prompt)
             out = normalize_segments(parsed, theme, provider, memory)
             if len(out) >= 4:
-                remember_segments(out)
-                return out
+                if github_primary and len(out) < 6:
+                    out.extend(github_fallback_segments(theme, github_items)[: 6 - len(out)])
+                remember_segments(out[:6])
+                return out[:6]
             if out:
-                out.extend(bridge_segments(theme)[: 6 - len(out)])
-                remember_segments(out)
-                return out
+                filler = github_fallback_segments(theme, github_items) if github_primary else bridge_segments(theme)
+                out.extend(filler[: 6 - len(out)])
+                remember_segments(out[:6])
+                return out[:6]
             model_errors.append(f'{provider}: no valid segments')
         except Exception as exc:
             model_errors.append(f'{provider}: {str(exc)[-500:]}')
@@ -447,6 +662,7 @@ def normalize_segments(parsed: dict[str, Any], theme: str, provider: str, memory
         if not isinstance(seg, dict):
             continue
         text = re.sub(r'\s+', ' ', str(seg.get('text') or '')).strip()
+        text = text.replace('xb_bittensorさん', '編集者さん').replace('xb_bittensor', '編集者')
         if len(text) < 120:
             continue
         if sum(1 for ch in text if '\u3040' <= ch <= '\u30ff' or '\u4e00' <= ch <= '\u9fff') < 60:
@@ -458,7 +674,7 @@ def normalize_segments(parsed: dict[str, Any], theme: str, provider: str, memory
         out.append({
             'id': f'{int(time.time())}-{provider}-{i}',
             'theme': theme,
-            'title': str(seg.get('title') or f'{theme} {i+1}'),
+            'title': str(seg.get('title') or f'{theme} {i+1}').replace('xb_bittensor', '編集者'),
             'text': text,
             'source': str(seg.get('source') or provider),
             'created_at': time.strftime('%Y-%m-%dT%H:%M:%S%z'),
@@ -481,8 +697,14 @@ def main() -> None:
     try:
         log_event('worker_started', pid=os.getpid(), theme=theme)
         update_state(research_status='collecting', loop_state='background_research', current_research_theme=theme)
-        research = run_x_search(theme)
-        log_event('research_finished', theme=theme, ok=research.get('ok'), skipped=research.get('skipped', False))
+        research = collect_research(theme, instruction=instruction)
+        log_event(
+            'research_finished',
+            theme=theme,
+            ok=research.get('ok'),
+            github_count=len(research.get('github') or []),
+            x_ok=(research.get('x') or {}).get('ok'),
+        )
         update_state(research_status='scripting', last_research=research)
         segments = build_segments(theme, profile, research, instruction=instruction, ignore_profile_script=ignore_profile_script)
         append_queue(segments)

@@ -126,6 +126,25 @@ tooling instead of browser `speechSynthesis`.
 - Pitch: `-15Hz`
 - Pronunciation normalization: `/home/kojima/work/kurage/backend/tts_normalizer.py`
 
+
+## GitHub Repository Themes
+
+When the editor enters a GitHub repository URL such as:
+
+```text
+https://github.com/datawhalechina/easy-vibe これをテーマに
+```
+
+AIRadio treats the repository as primary source material instead of just using
+the URL as a search keyword. The background worker extracts `owner/repo`, reads
+GitHub metadata and README content, summarizes the learning path, and passes
+that material into the script prompt. X search remains supplemental.
+
+This prevents repository-based topics from becoming generic AI talk. For
+`easy-vibe`, the generated program should discuss the course concept, target
+learners, staged learning paths, practical projects, and usage caveats.
+Internal account names are normalized to `編集者` before display or speech.
+
 The browser requests MP3 audio through `api.php?action=tts` and plays that audio.
 Therefore YouTube Live receives the same generated Kurage voice that the local
 viewer hears. Public FTP deployments should use the HTTP endpoint path so the
