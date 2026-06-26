@@ -2,6 +2,8 @@
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/lib.php';
 airadio_handle_login();
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
 $auth = airadio_auth();
 $allowed = !empty($auth['allowed']);
 $loginUrl = isset($auth['login_url']) ? $auth['login_url'] : '?demo_login=xb_bittensor';
@@ -41,7 +43,7 @@ $isAdmin = !empty($auth['is_admin']);
       <?php endif; ?>
       <div class="sleepNote">眠るためのラジオなので、声は穏やかに、話題は深く、テンポはゆっくり。Kurage AgentReachの情報収集が遅くても、表の話は止めません。</div>
     </div>
-    <div class="card avatarStage"><div class="orb one"></div><div class="orb two"></div><div class="status"><div class="small">ON AIR STATUS</div><div class="now" id="nowTalking">待機中</div><div class="small" id="researchStatus">research: idle</div><div class="meter"><span id="meter"></span></div></div><img id="avatar" class="avatar" src="assets/kurage_radio_idle.png" alt="Kurage AI VTuber"></div>
+    <div class="card avatarStage"><div class="orb one"></div><div class="orb two"></div><div class="status"><div class="small">ON AIR STATUS</div><div class="now" id="nowTalking">待機中</div><div class="small" id="researchStatus">research: idle</div><div class="small">voice: Kurage TTS / ja-JP-NanamiNeural / +10% / -15Hz</div><div class="meter"><span id="meter"></span></div></div><img id="avatar" class="avatar" src="assets/kurage_radio_idle.png" alt="Kurage AI VTuber"></div>
   </section>
   <section class="grid">
     <div class="card"><h2>今話している内容</h2><div id="currentText" class="log"></div></div>
