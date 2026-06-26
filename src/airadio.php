@@ -59,31 +59,45 @@ const loopLog = document.getElementById('loopLog');
 const commentsBox = document.getElementById('comments');
 const researchStatus = document.getElementById('researchStatus');
 const meter = document.getElementById('meter');
-let running = false; let endsAt = 0; let speaking = false; let lastCurrentId = ''; let selectedVoice = null; let hasDefaultStreamKey = false;
+let running = false; let endsAt = 0; let speaking = false; let lastCurrentId = ''; let currentAudio = null; let hasDefaultStreamKey = false;
 const bridgeTexts = ['少しだけ、静かな間を置きます。考えは急がなくて大丈夫です。','裏側で情報を集めています。こちらでは、今のテーマをゆっくりほどいていきます。'];
 function log(msg){ const el=document.createElement('div'); el.className='segment'; el.textContent=new Date().toLocaleTimeString()+'  '+msg; loopLog.prepend(el); }
 function setMouth(on){ avatar.src = on ? 'assets/kurage_radio_talk.png' : 'assets/kurage_radio_idle.png'; avatar.classList.toggle('talking', on); meter.style.width = on ? '78%' : '18%'; }
-function chooseVoice(){
-  const voices = speechSynthesis.getVoices();
-  const ja = voices.filter(v => (v.lang || '').toLowerCase().startsWith('ja'));
-  const preferred = ['nanami','haruka','kyoko','ayumi','ichiro','google 日本語','japanese'];
-  selectedVoice = ja.find(v => preferred.some(key => v.name.toLowerCase().includes(key))) || ja[0] || null;
+function stopCurrentAudio(){
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.src = '';
+    currentAudio = null;
+  }
+  speaking = false;
+  setMouth(false);
 }
-chooseVoice();
-speechSynthesis.onvoiceschanged = chooseVoice;
 function speakText(text, title=''){
-  return new Promise(resolve=>{
-    const u = new SpeechSynthesisUtterance(text); u.lang='ja-JP'; u.rate=.9; u.pitch=1.12; u.volume=.98;
-    if (selectedVoice) u.voice = selectedVoice;
-    u.onstart=()=>{ speaking=true; setMouth(true); nowTalking.textContent=title||'話しています'; currentText.textContent=text; };
-    u.onend=()=>{ speaking=false; setMouth(false); resolve(); };
-    u.onerror=()=>{ speaking=false; setMouth(false); resolve(); };
-    speechSynthesis.speak(u);
+  return new Promise(async resolve=>{
+    stopCurrentAudio();
+    nowTalking.textContent=title||'話しています';
+    currentText.textContent=text;
+    let url = '';
+    try {
+      const res = await fetch('api.php?action=tts', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text})});
+      if (!res.ok) throw new Error('TTS HTTP '+res.status);
+      const blob = await res.blob();
+      url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      currentAudio = audio;
+      audio.onplay=()=>{ speaking=true; setMouth(true); };
+      audio.onended=()=>{ if (currentAudio === audio) currentAudio = null; speaking=false; setMouth(false); URL.revokeObjectURL(url); resolve(); };
+      audio.onerror=()=>{ if (currentAudio === audio) currentAudio = null; speaking=false; setMouth(false); if (url) URL.revokeObjectURL(url); resolve(); };
+      await audio.play();
+    } catch(e) {
+      log('TTS再生に失敗しました: '+(e.message||e));
+      if (url) URL.revokeObjectURL(url);
+      speaking=false; setMouth(false); resolve();
+    }
   });
 }
 async function radioLoop(){
   while(running && Date.now() < endsAt){
-    if (speechSynthesis.paused) speechSynthesis.resume();
     let d; try { d = await api('next'); } catch(e) { d = {item:{title:'ブリッジ',text:bridgeTexts[Math.floor(Math.random()*bridgeTexts.length)]}}; }
     const item = d.item || {}; log(`${item.source||'segment'}: ${item.title||''}`);
     await speakText(item.text || bridgeTexts[0], item.title || 'Kurage Radio');
@@ -135,7 +149,7 @@ setInterval(refresh, 4000); refresh();
 if (IS_ADMIN) {
   document.getElementById('startBtn').onclick=async()=>{ const theme=document.getElementById('theme').value.trim(); const hours=Number(document.getElementById('hours').value||1); const d=await api('start',{theme,duration_hours:hours}); endsAt = Date.now()+hours*3600*1000; running=true; log('radio started'); radioLoop(); };
   document.getElementById('interruptBtn').onclick=async()=>{ const theme=document.getElementById('theme').value.trim(); if(!theme){ log('割り込みテーマを入力してください'); return; } await api('interrupt',{theme}); log('theme interrupted: '+theme); };
-  document.getElementById('stopBtn').onclick=async()=>{ running=false; speechSynthesis.cancel(); await api('stop'); log('stopped'); nowTalking.textContent='停止中'; setMouth(false); };
+  document.getElementById('stopBtn').onclick=async()=>{ running=false; stopCurrentAudio(); await api('stop'); log('stopped'); nowTalking.textContent='停止中'; setMouth(false); };
   document.getElementById('youtubeStartBtn').onclick=async()=>{ const stream_key=document.getElementById('streamKey').value.trim(); if(!stream_key && !hasDefaultStreamKey){ log('YouTube Live ストリームキーを入力してください'); return; } const d=await api('youtube_start',{stream_key,viewer_url:location.href.split('#')[0]}); log(d.ok?'YouTube配信を開始しました':'YouTube配信開始に失敗しました'); };
   document.getElementById('youtubeStopBtn').onclick=async()=>{ const d=await api('youtube_stop',{}); log(d.ok?'YouTube配信を停止しました':'YouTube配信停止に失敗しました'); };
 } else {

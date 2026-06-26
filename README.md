@@ -45,6 +45,7 @@ editorial intent into a calm, continuous program.
 
 - `src/airadio.php`: white, URL2AI-like radio UI
 - `src/api.php`: control API for start/stop/theme interrupt/next segment/YouTube Live hooks
+- `src/api.php?action=tts`: Kurage-standard edge-tts audio endpoint
 - `src/airadio_worker.py`: background Kurage AgentReach/Ollama script refill worker
 - `src/assets/kurage_radio_idle.png`: Kurage bishoujo idle avatar
 - `src/assets/kurage_radio_talk.png`: Kurage bishoujo talking avatar
@@ -102,6 +103,21 @@ research for that theme. The radio keeps talking while the new script is built.
 ## Duration
 
 The UI supports 1 to 6 hour sessions in 1 hour increments.
+
+## Voice / TTS
+
+AIRadio uses the same Kurage-standard TTS path as the broader Kurage VTuber
+tooling instead of browser `speechSynthesis`.
+
+- Script: `/home/kojima/work/kvtuber/scripts/kurage-edge-tts.py`
+- Voice: `ja-JP-NanamiNeural`
+- Rate: `+10%`
+- Pitch: `-15Hz`
+- Pronunciation normalization: `/home/kojima/work/kurage/backend/tts_normalizer.py`
+
+The browser requests MP3 audio through `api.php?action=tts` and plays that audio.
+Therefore YouTube Live receives the same generated Kurage voice that the local
+viewer hears.
 
 ## YouTube Live
 

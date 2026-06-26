@@ -34,6 +34,51 @@ function airadio_post_json($url, $payload, $headers = []) {
     return is_array($data) ? $data : ['raw' => $raw];
 }
 
+function airadio_run_tts($text) {
+    $text = trim((string)$text);
+    if ($text === '') { bad('tts_text_required'); }
+    if (!is_file(AIRADIO_TTS_SCRIPT)) {
+        bad('tts_script_not_found', 500, ['script' => AIRADIO_TTS_SCRIPT]);
+    }
+    if (!is_dir(AIRADIO_TTS_CACHE_DIR)) { mkdir(AIRADIO_TTS_CACHE_DIR, 0775, true); }
+
+    $hash = hash('sha256', AIRADIO_TTS_VOICE . "\n" . AIRADIO_TTS_RATE . "\n" . AIRADIO_TTS_PITCH . "\n" . $text);
+    $out = AIRADIO_TTS_CACHE_DIR . '/' . $hash . '.mp3';
+    if (is_file($out) && filesize($out) > 1000) { return $out; }
+
+    $payload = json_encode([
+        'input' => $text,
+        'voice' => AIRADIO_TTS_VOICE,
+        'speed' => 1.1,
+    ], JSON_UNESCAPED_UNICODE);
+    $cmd = 'env'
+        . ' KURAGE_TTS_VOICE=' . escapeshellarg(AIRADIO_TTS_VOICE)
+        . ' KURAGE_TTS_RATE=' . escapeshellarg(AIRADIO_TTS_RATE)
+        . ' KURAGE_TTS_PITCH=' . escapeshellarg(AIRADIO_TTS_PITCH)
+        . ' KURAGE_TTS_NORMALIZER_DIR=' . escapeshellarg('/home/kojima/work/kurage/backend')
+        . ' ' . escapeshellarg(AIRADIO_TTS_PYTHON)
+        . ' ' . escapeshellarg(AIRADIO_TTS_SCRIPT)
+        . ' --output ' . escapeshellarg($out);
+    $proc = proc_open($cmd, [
+        0 => ['pipe', 'r'],
+        1 => ['pipe', 'w'],
+        2 => ['pipe', 'w'],
+    ], $pipes, dirname(AIRADIO_TTS_SCRIPT));
+    if (!is_resource($proc)) { bad('tts_process_failed', 500); }
+    fwrite($pipes[0], $payload);
+    fclose($pipes[0]);
+    $stdout = stream_get_contents($pipes[1]);
+    fclose($pipes[1]);
+    $stderr = stream_get_contents($pipes[2]);
+    fclose($pipes[2]);
+    $code = proc_close($proc);
+    if ($code !== 0 || !is_file($out) || filesize($out) <= 1000) {
+        @unlink($out);
+        bad('tts_failed', 500, ['code' => $code, 'stderr' => substr((string)$stderr, -1000), 'stdout' => substr((string)$stdout, -500)]);
+    }
+    return $out;
+}
+
 function airadio_default_stream_key() {
     $env = trim((string)getenv('YOUTUBE_STREAM_KEY'));
     if ($env !== '') { return $env; }
@@ -71,6 +116,16 @@ if ($action === 'profile') {
 
 if ($action === 'current') {
     ok(['state' => airadio_state(), 'current' => airadio_current_segment(), 'comments' => airadio_comments()]);
+}
+
+if ($action === 'tts') {
+    $text = isset($input['text']) ? (string)$input['text'] : '';
+    $path = airadio_run_tts($text);
+    header('Content-Type: audio/mpeg');
+    header('Content-Length: ' . filesize($path));
+    header('Cache-Control: private, max-age=86400');
+    readfile($path);
+    exit;
 }
 
 if ($action === 'comments') {
