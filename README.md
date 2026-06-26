@@ -110,6 +110,7 @@ AIRadio uses the same Kurage-standard TTS path as the broader Kurage VTuber
 tooling instead of browser `speechSynthesis`.
 
 - Script: `/home/kojima/work/kvtuber/scripts/kurage-edge-tts.py`
+- HTTP endpoint: `AIRADIO_TTS_ENDPOINT` or `http://exbridge.ddns.net:18308/kurage-tts/v1/audio/speech`
 - Voice: `ja-JP-NanamiNeural`
 - Rate: `+10%`
 - Pitch: `-15Hz`
@@ -117,7 +118,8 @@ tooling instead of browser `speechSynthesis`.
 
 The browser requests MP3 audio through `api.php?action=tts` and plays that audio.
 Therefore YouTube Live receives the same generated Kurage voice that the local
-viewer hears.
+viewer hears. Public FTP deployments should use the HTTP endpoint path so the
+Apache/PHP host does not need local Python, edge-tts, or the kvtuber checkout.
 
 ## YouTube Live
 

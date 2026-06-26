@@ -20,6 +20,9 @@ const AIRADIO_TTS_SCRIPT = AIRADIO_KVTUBER_DIR . '/scripts/kurage-edge-tts.py';
 const AIRADIO_TTS_VOICE = 'ja-JP-NanamiNeural';
 const AIRADIO_TTS_RATE = '+10%';
 const AIRADIO_TTS_PITCH = '-15Hz';
+if (!defined('AIRADIO_TTS_ENDPOINT')) {
+    define('AIRADIO_TTS_ENDPOINT', getenv('AIRADIO_TTS_ENDPOINT') ?: 'http://exbridge.ddns.net:18308/kurage-tts/v1/audio/speech');
+}
 
 if (!defined('AIGM_BASE_URL')) { define('AIGM_BASE_URL', 'https://airadio.exbridge.jp'); }
 if (!defined('AIGM_AUTH_BASE_URL')) { define('AIGM_AUTH_BASE_URL', 'https://aiknowledgecms.exbridge.jp'); }

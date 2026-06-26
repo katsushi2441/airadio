@@ -37,12 +37,10 @@ function airadio_post_json($url, $payload, $headers = []) {
 function airadio_run_tts($text) {
     $text = trim((string)$text);
     if ($text === '') { bad('tts_text_required'); }
-    if (!is_file(AIRADIO_TTS_SCRIPT)) {
-        bad('tts_script_not_found', 500, ['script' => AIRADIO_TTS_SCRIPT]);
-    }
     if (!is_dir(AIRADIO_TTS_CACHE_DIR)) { mkdir(AIRADIO_TTS_CACHE_DIR, 0775, true); }
 
-    $hash = hash('sha256', AIRADIO_TTS_VOICE . "\n" . AIRADIO_TTS_RATE . "\n" . AIRADIO_TTS_PITCH . "\n" . $text);
+    $endpoint = defined('AIRADIO_TTS_ENDPOINT') ? (string)AIRADIO_TTS_ENDPOINT : '';
+    $hash = hash('sha256', $endpoint . "\n" . AIRADIO_TTS_VOICE . "\n" . AIRADIO_TTS_RATE . "\n" . AIRADIO_TTS_PITCH . "\n" . $text);
     $out = AIRADIO_TTS_CACHE_DIR . '/' . $hash . '.mp3';
     if (is_file($out) && filesize($out) > 1000) { return $out; }
 
@@ -51,6 +49,33 @@ function airadio_run_tts($text) {
         'voice' => AIRADIO_TTS_VOICE,
         'speed' => 1.1,
     ], JSON_UNESCAPED_UNICODE);
+    if ($endpoint !== '') {
+        $ctx = stream_context_create(['http' => [
+            'method' => 'POST',
+            'header' => "Content-Type: application/json\r\n",
+            'content' => $payload,
+            'timeout' => 45,
+            'ignore_errors' => true,
+        ]]);
+        $audio = @file_get_contents($endpoint, false, $ctx);
+        $contentType = '';
+        if (isset($http_response_header) && is_array($http_response_header)) {
+            foreach ($http_response_header as $line) {
+                if (stripos($line, 'Content-Type:') === 0) {
+                    $contentType = strtolower(trim(substr($line, 13)));
+                    break;
+                }
+            }
+        }
+        if (is_string($audio) && strlen($audio) > 1000 && strpos($contentType, 'audio/') === 0) {
+            file_put_contents($out, $audio);
+            return $out;
+        }
+    }
+
+    if (!is_file(AIRADIO_TTS_SCRIPT)) {
+        bad('tts_script_not_found', 500, ['script' => AIRADIO_TTS_SCRIPT, 'endpoint' => $endpoint]);
+    }
     $cmd = 'env'
         . ' KURAGE_TTS_VOICE=' . escapeshellarg(AIRADIO_TTS_VOICE)
         . ' KURAGE_TTS_RATE=' . escapeshellarg(AIRADIO_TTS_RATE)
