@@ -133,8 +133,27 @@ def extract_github_repo_label(text: str) -> str:
     return f'{m.group(1)}/{repo}'
 
 
+def extract_urls(text: str, limit: int = 12) -> list[str]:
+    urls = re.findall(r'https?://[^\s「」『』"\'`<>]+', text or '')
+    cleaned: list[str] = []
+    for url in urls:
+        url = url.rstrip('。、.!！?)]）')
+        if url and url not in cleaned:
+            cleaned.append(url)
+        if len(cleaned) >= limit:
+            break
+    return cleaned
+
+
+def normalize_url_list(text: str) -> str:
+    return '\n'.join(extract_urls(text))
+
+
 def spoken_theme_title(theme: str, instruction: str = '') -> str:
     source = instruction.strip() or theme
+    url_count = len(extract_urls(source))
+    if url_count >= 2:
+        return f'{url_count}本の資料'
     if extract_github_repo_label(source) or re.search(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', theme or ''):
         return 'このリポジトリ'
     if re.search(r'https?://', source or ''):
@@ -148,6 +167,9 @@ def normalize_theme_request(text: str) -> str:
     original = (text or '').strip()
     if not original:
         return ''
+    urls = extract_urls(original)
+    if urls:
+        return '\n'.join(urls)
     repo = extract_github_repo_label(original)
     cleaned = re.sub(r'[「」『』"\'`]', '', original)
     cleaned = re.sub(r'\s+', ' ', cleaned).strip()
@@ -171,6 +193,11 @@ def normalize_theme_request(text: str) -> str:
 
 
 def theme_guidance(theme: str) -> str:
+    url_count = len(extract_urls(theme))
+    if url_count >= 2:
+        return '複数URLを一次資料として扱い、共通点、違い、重要論点、実践上の意味を整理して話す。URL文字列は読み上げない。'
+    if url_count == 1:
+        return 'URL先の本文を一次資料として扱い、内容を読んで要点、背景、使いどころ、注意点を考察して話す。URL文字列は読み上げない。'
     if extract_github_repo_label(theme) or re.search(r'^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', theme or ''):
         return 'GitHubリポジトリを一次資料として扱い、READMEとリポジトリ情報から重要点を判断して話す。資料にない文脈を勝手に足さない。'
     if re.search(r'入門|初心者|初級|はじめて|基礎', theme or ''):
@@ -187,6 +214,18 @@ def seed_instruction_program(theme: str, instruction: str) -> list[dict[str, Any
         'id': f'instruction-seed-{ts}-0', 'theme': theme, 'requested_theme': instruction,
         'title': spoken, 'text': f'{spoken}について、資料の内容から順に見ていきます。まずは全体像、次に重要なポイント、最後に使いどころを整理します。',
         'source': 'instruction-seed-opening', 'created_at': now_iso(),
+    }]
+
+
+def seed_url_program(urls: list[str]) -> list[dict[str, Any]]:
+    ts = int(time.time())
+    title = f'{len(urls)}本の資料' if len(urls) >= 2 else 'この資料'
+    return [{
+        'id': f'url-seed-{ts}-0', 'theme': '\n'.join(urls), 'requested_theme': '\n'.join(urls),
+        'title': title,
+        'text': f'{title}の内容を読み取りながら、要点、背景、共通点、違い、実践で役立つポイントを順番に考察します。',
+        'source': 'url-seed-opening',
+        'created_at': now_iso(),
     }]
 
 
@@ -331,20 +370,23 @@ async def api_action(action: str, request: Request, x_airadio_auth: str | None =
     if action == 'start':
         require_admin(auth)
         raw_theme = str(body.get('theme') or '').strip()
+        urls = extract_urls(raw_theme)
         has_instruction = bool(raw_theme)
         profile = fetch_x_profile(ALLOWED_USER)
         profile['listener_username'] = ALLOWED_USER
         profile['logged_in_user'] = str(auth.get('session_user') or '')
-        theme = normalize_theme_request(raw_theme) if raw_theme else default_theme_from_profile(profile)
+        theme = normalize_url_list(raw_theme) if urls else (normalize_theme_request(raw_theme) if raw_theme else default_theme_from_profile(profile))
         guidance = theme_guidance(theme)
         hours = max(1, min(6, int(body.get('duration_hours') or 1)))
         ts = int(time.time())
         reset_program_memory()
         new_state = update_state({'status': 'on_air', 'theme': theme, 'duration_hours': hours, 'started_at': now_iso(), 'ends_at': time.strftime('%Y-%m-%dT%H:%M:%S%z', time.localtime(ts + hours * 3600)), 'loop_state': 'speaking', 'research_status': 'queued', 'broadcaster': auth.get('session_user') or ALLOWED_USER, 'requested_theme': raw_theme, 'theme_guidance': guidance})
-        opening = {'id': f'opening-{ts}', 'theme': theme, 'requested_theme': raw_theme, 'title': (spoken_theme_title(theme, raw_theme) + 'を始めます') if has_instruction else 'オープニング', 'text': 'こんばんは。Kurage AI VTuber Radioです。' + (spoken_theme_title(theme, raw_theme) if has_instruction else spoken_theme_title(theme)) + 'について話します。', 'source': 'opening', 'created_at': now_iso()}
-        items = [opening] + (seed_instruction_program(theme, raw_theme) if has_instruction else seed_profile_program(theme))
+        opening_title = (spoken_theme_title(theme, raw_theme) + 'を始めます') if has_instruction else 'オープニング'
+        opening_text = 'こんばんは。Kurage AI VTuber Radioです。' + (spoken_theme_title(theme, raw_theme) if has_instruction else spoken_theme_title(theme)) + 'について話します。'
+        opening = {'id': f'opening-{ts}', 'theme': theme, 'requested_theme': raw_theme, 'title': opening_title, 'text': opening_text, 'source': 'opening', 'created_at': now_iso()}
+        items = [opening] + (seed_url_program(urls) if urls else (seed_instruction_program(theme, raw_theme) if has_instruction else seed_profile_program(theme)))
         write_json(QUEUE, {'items': items, 'updated_at': now_iso()})
-        pid = start_worker(theme, profile, 'start', {'instruction': raw_theme, 'theme_guidance': guidance, 'ignore_profile_script': has_instruction})
+        pid = start_worker(theme, profile, 'start', {'instruction': '\n'.join(urls) if urls else raw_theme, 'theme_guidance': guidance, 'ignore_profile_script': has_instruction, 'duration_hours': hours})
         return {'ok': True, 'state': new_state, 'worker_pid': pid, 'tts_prefetch_pid': '', 'prefetch_items': items[:TTS_PREFETCH_LIMIT]}
     if action == 'stop':
         require_admin(auth)
@@ -353,18 +395,19 @@ async def api_action(action: str, request: Request, x_airadio_auth: str | None =
     if action == 'interrupt':
         require_admin(auth)
         raw_theme = str(body.get('theme') or '').strip()
-        theme = normalize_theme_request(raw_theme)
-        if not theme:
-            raise HTTPException(400, 'theme_required')
+        urls = extract_urls(raw_theme)
+        if not urls:
+            raise HTTPException(400, 'url_required')
+        theme = '\n'.join(urls)
         guidance = theme_guidance(theme)
         q = queue()
-        item = {'id': f'interrupt-{int(time.time())}', 'theme': theme, 'requested_theme': raw_theme, 'title': spoken_theme_title(theme, raw_theme) + 'へ切り替え', 'text': spoken_theme_title(theme, raw_theme) + 'について話します。', 'source': 'interrupt', 'created_at': now_iso()}
+        item = {'id': f'interrupt-{int(time.time())}', 'theme': theme, 'requested_theme': theme, 'title': spoken_theme_title(theme, theme) + 'へ切り替え', 'text': spoken_theme_title(theme, theme) + 'を読み込み、要点と考察をラジオとして伝えます。', 'source': 'url-interrupt', 'created_at': now_iso()}
         q['items'].insert(0, item)
         q['updated_at'] = now_iso()
         write_json(QUEUE, q)
         new_state = update_state({'theme': theme, 'requested_theme': raw_theme, 'theme_guidance': guidance, 'research_status': 'queued', 'loop_state': 'theme_interrupt'})
         profile = fetch_x_profile(ALLOWED_USER)
-        pid = start_worker(theme, profile, 'interrupt', {'instruction': raw_theme, 'theme_guidance': guidance, 'ignore_profile_script': True})
+        pid = start_worker(theme, profile, 'interrupt', {'instruction': theme, 'theme_guidance': guidance, 'ignore_profile_script': True, 'duration_hours': int(state().get('duration_hours') or 1)})
         return {'ok': True, 'state': new_state, 'worker_pid': pid, 'tts_prefetch_pid': '', 'queue': q}
     if action == 'next':
         require_admin(auth)

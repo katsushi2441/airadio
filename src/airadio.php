@@ -31,17 +31,17 @@ $isAdmin = !empty($auth['is_admin']);
   <section class="hero">
     <div class="card">
       <div class="brand"><div><span class="tag">聴きながらよく寝れる</span><h1>Kurage AI<br>VTuber Radio</h1></div><a class="btn secondary" href="<?= htmlspecialchars($logoutUrl) ?>">ログアウト</a></div>
-      <p class="lead">KurageがDJ、編集者が学びたいテーマを選ぶ番組です。Kurage AgentReachで情報収集しながら、指定されたテーマを、眠りに入りやすいテンポで深く学べるラジオとして話し続けます。</p>
-      <div class="rolePill">編集者がテーマを整え、Kurageがリスナーへ語ります</div>
+      <p class="lead">KurageがDJ、編集者が選んだURL資料を読み込み、GitHub、ブログ、ニュースの内容を考察するラジオ番組です。長尺では関連ページも補助資料として集め、眠りに入りやすいテンポで深く学べるように話し続けます。</p>
+      <div class="rolePill">編集者がURL資料を選び、Kurageがリスナーへ語ります</div>
       <?php if ($isAdmin): ?>
-      <div class="controls"><textarea id="theme" placeholder="割り込ませたいテーマがあれば入力。空白のまま開始すると、編集者のXプロフィールからテーマを作ります。"></textarea><select id="hours"><option value="1">1時間</option><option value="2">2時間</option><option value="3">3時間</option><option value="4">4時間</option><option value="5">5時間</option><option value="6">6時間</option></select></div>
-      <div class="buttons"><button class="btn live" id="startBtn">ラジオ開始</button><button class="btn secondary" id="interruptBtn">テーマ割り込み</button><button class="btn secondary" id="stopBtn">停止</button></div>
+      <div class="controls"><textarea id="theme" placeholder="割込みテーマURL&#10;1行1URLで入力。GitHub、ブログ、ニュースURLを複数指定できます。&#10;空白のまま開始すると、編集者のXプロフィールから番組を作ります。"></textarea><select id="hours"><option value="1">1時間</option><option value="2">2時間</option><option value="3">3時間</option><option value="4">4時間</option><option value="5">5時間</option><option value="6">6時間</option></select></div>
+      <div class="buttons"><button class="btn live" id="startBtn">ラジオ開始</button><button class="btn secondary" id="interruptBtn">URL割り込み</button><button class="btn secondary" id="stopBtn">停止</button></div>
       <div class="liveControls"><input id="streamKey" type="password" placeholder="YouTube Live ストリームキー（空欄なら保存済みキー）"><button class="btn secondary" id="youtubeStartBtn">YouTube配信</button><button class="btn secondary" id="youtubeStopBtn">配信停止</button></div>
       <?php else: ?>
       <div class="buttons"><button class="btn live" id="listenBtn">視聴開始</button></div>
       <div class="sleepNote">この画面は視聴専用です。編集者が配信開始している間、同じ現在台本を取得して読み上げます。配信していないときは待機中になります。</div>
       <?php endif; ?>
-      <div class="sleepNote">眠るためのラジオなので、声は穏やかに、話題は深く、テンポはゆっくり。Kurage AgentReachの情報収集が遅くても、表の話は止めません。</div>
+      <div class="sleepNote">眠るためのラジオなので、声は穏やかに、内容は深く、テンポはゆっくり。URL資料の取得や関連ページ検索が遅くても、表の話は止めません。</div>
     </div>
     <div class="card avatarStage"><div class="orb one"></div><div class="orb two"></div><div class="status"><div class="small">ON AIR STATUS</div><div class="now" id="nowTalking">待機中</div><div class="small" id="researchStatus">research: idle</div><div class="small">voice: Kurage TTS / ja-JP-NanamiNeural / +10% / -15Hz</div><div class="meter"><span id="meter"></span></div></div><img id="avatar" class="avatar" src="assets/kurage_radio_idle.png" alt="Kurage AI VTuber"></div>
   </section>
@@ -66,6 +66,7 @@ const audioCache = new Map();
 const audioPrefetching = new Set();
 const audioPromises = new Map();
 const bridgeTexts = ['少しだけ、静かな間を置きます。考えは急がなくて大丈夫です。','裏側で情報を集めています。こちらでは、今のテーマをゆっくりほどいていきます。'];
+function extractUrls(text){ return [...new Set((text || '').match(/https?:\/\/[^\s「」『』"'`<>]+/g) || [])].map(u=>u.replace(/[。、.!！?)]）]+$/,'')); }
 function log(msg){ const el=document.createElement('div'); el.className='segment'; el.textContent=new Date().toLocaleTimeString()+'  '+msg; loopLog.prepend(el); }
 function setMouth(on){ avatar.src = on ? 'assets/kurage_radio_talk.png' : 'assets/kurage_radio_idle.png'; avatar.classList.toggle('talking', on); meter.style.width = on ? '78%' : '18%'; }
 function stopCurrentAudio(){
@@ -188,7 +189,7 @@ async function refresh(){ try{ const d=await api('status'); const s=d.state||{};
 setInterval(refresh, 4000); refresh();
 if (IS_ADMIN) {
   document.getElementById('startBtn').onclick=async()=>{ const theme=document.getElementById('theme').value.trim(); const hours=Number(document.getElementById('hours').value||1); nowTalking.textContent='初回音声を準備中'; currentText.textContent='最初の台本と音声を準備しています。ここだけ少し時間がかかります。始まった後は、次の音声をバックグラウンドで先読みして、できるだけ間が空かないようにします。'; const d=await api('start',{theme,duration_hours:hours}); prefetchItems(d.prefetch_items||[]); endsAt = Date.now()+hours*3600*1000; running=true; log('radio started'); radioLoop(); };
-  document.getElementById('interruptBtn').onclick=async()=>{ const theme=document.getElementById('theme').value.trim(); if(!theme){ log('割り込みテーマを入力してください'); return; } await api('interrupt',{theme}); log('theme interrupted: '+theme); };
+  document.getElementById('interruptBtn').onclick=async()=>{ const theme=document.getElementById('theme').value.trim(); const urls=extractUrls(theme); if(!urls.length){ log('割込みテーマURLを1行1URLで入力してください'); return; } await api('interrupt',{theme:urls.join('\n')}); log('URL interrupt: '+urls.length+'件'); };
   document.getElementById('stopBtn').onclick=async()=>{ running=false; stopCurrentAudio(); await api('stop'); log('stopped'); nowTalking.textContent='停止中'; setMouth(false); };
   document.getElementById('youtubeStartBtn').onclick=async()=>{ const stream_key=document.getElementById('streamKey').value.trim(); if(!stream_key && !hasDefaultStreamKey){ log('YouTube Live ストリームキーを入力してください'); return; } const d=await api('youtube_start',{stream_key,viewer_url:location.href.split('#')[0]}); log(d.ok?'YouTube配信を開始しました':'YouTube配信開始に失敗しました'); };
   document.getElementById('youtubeStopBtn').onclick=async()=>{ const d=await api('youtube_stop',{}); log(d.ok?'YouTube配信を停止しました':'YouTube配信停止に失敗しました'); };

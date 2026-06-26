@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import html
 import json
 import os
@@ -12,6 +13,7 @@ import sys
 import time
 import urllib.request
 import urllib.error
+import urllib.parse
 from pathlib import Path
 from typing import Any, Optional
 
@@ -194,7 +196,7 @@ def extract_urls(text: str) -> list[str]:
         url = url.rstrip('。、.!！?)]）')
         if url and url not in cleaned:
             cleaned.append(url)
-    return cleaned[:5]
+    return cleaned[:12]
 
 
 def extract_github_repos(text: str) -> list[str]:
@@ -209,7 +211,7 @@ def extract_github_repos(text: str) -> list[str]:
             name = f'{owner}/{repo}'
             if name not in repos:
                 repos.append(name)
-    return repos[:3]
+    return repos[:8]
 
 
 def http_get_text(url: str, timeout: int = 20, accept: str = 'text/plain') -> tuple[int, str]:
@@ -301,7 +303,7 @@ def run_url_research(text: str) -> list[dict[str, Any]]:
             results.append(fetch_url_content(url))
         except Exception as exc:
             results.append({'type': 'web_page', 'ok': False, 'source_label': '参照URLのページ', 'url': url, 'error': str(exc)})
-    return results[:3]
+    return results[:10]
 
 
 def summarize_readme_locally(readme: str, limit: int = 3600) -> str:
@@ -411,24 +413,101 @@ def research_query_from_theme(theme: str, github_items: list[dict[str, Any]], we
     return theme
 
 
-def collect_research(theme: str, instruction: str = '') -> dict[str, Any]:
+def decode_bing_redirect(url: str) -> str:
+    if 'bing.com/ck/' not in url or 'u=' not in url:
+        return url
+    try:
+        parsed = urllib.parse.urlparse(url)
+        value = urllib.parse.parse_qs(parsed.query).get('u', [''])[0]
+        if value.startswith('a1'):
+            encoded = value[2:]
+            padded = encoded + '=' * (-len(encoded) % 4)
+            decoded = base64.urlsafe_b64decode(padded.encode('ascii')).decode('utf-8', errors='replace')
+            if decoded.startswith('http'):
+                return decoded
+    except Exception:
+        return url
+    return url
+
+
+def search_result_urls(query: str) -> list[str]:
+    urls: list[str] = []
+    search_urls = [
+        'https://duckduckgo.com/html/?q=' + urllib.parse.quote(query[:180]),
+        'https://www.bing.com/search?q=' + urllib.parse.quote(query[:180]),
+    ]
+    for search_url in search_urls:
+        try:
+            status, body = http_get_text(search_url, timeout=18, accept='text/html,application/xhtml+xml,*/*;q=0.8')
+        except Exception:
+            continue
+        if status >= 400:
+            continue
+        patterns = [
+            r'<h2[^>]*>\s*<a[^>]+href=["\']([^"\']+)["\']',
+            r'href=["\']([^"\']+)["\']',
+        ]
+        for pattern in patterns:
+            for match in re.finditer(pattern, body, re.I):
+                href = html.unescape(match.group(1))
+                if 'uddg=' in href:
+                    parsed = urllib.parse.urlparse(href)
+                    qs = urllib.parse.parse_qs(parsed.query)
+                    href = qs.get('uddg', [''])[0]
+                href = decode_bing_redirect(href)
+                if not href.startswith('http'):
+                    continue
+                if any(blocked in href for blocked in ['duckduckgo.com', 'google.com/search', 'bing.com/search', 'r.bing.com', 'th.bing.com']):
+                    continue
+                href = href.rstrip('。、.!！?)]）')
+                if href not in urls:
+                    urls.append(href)
+                if len(urls) >= 16:
+                    return urls
+    return urls
+
+
+def search_related_pages(query: str, known_urls: list[str], limit: int = 4) -> list[dict[str, Any]]:
+    if not query.strip() or os.environ.get('AIRADIO_DISABLE_RELATED_SEARCH') == '1':
+        return []
+    candidates = [url for url in search_result_urls(query) if url not in known_urls]
+    pages: list[dict[str, Any]] = []
+    for url in candidates:
+        try:
+            page = fetch_url_content(url)
+            if page.get('ok'):
+                page['source_label'] = '関連ページ'
+                pages.append(page)
+        except Exception:
+            continue
+        if len(pages) >= limit:
+            break
+    return pages
+
+
+def collect_research(theme: str, instruction: str = '', duration_hours: int = 1) -> dict[str, Any]:
     source_text = f'{instruction}\n{theme}'
     github_items = run_github_research(source_text)
     web_pages = run_url_research(source_text)
     x_query = research_query_from_theme(theme, github_items, web_pages)
+    urls = extract_urls(source_text)
+    related_pages = []
+    if urls and duration_hours >= 2:
+        related_pages = search_related_pages(x_query, urls, limit=min(6, max(2, duration_hours)))
     if github_items or web_pages:
         x_result = {'ok': False, 'skipped': True, 'reason': 'primary_url_material_available'}
     else:
         x_result = run_x_search(x_query)
     return {
-        'ok': bool(github_items) or bool(web_pages) or bool(x_result.get('ok')),
+        'ok': bool(github_items) or bool(web_pages) or bool(related_pages) or bool(x_result.get('ok')),
         'theme': theme,
         'instruction': instruction,
         'github': github_items,
         'web_pages': web_pages,
+        'related_pages': related_pages,
         'x_query': x_query,
         'x': x_result,
-        'notes': 'URLs are fetched first and treated as primary source material; X search is supplemental signal only.',
+        'notes': 'URLs are fetched first and treated as primary source material; related pages are supplemental material for long-form radio.',
     }
 
 def run_x_search(theme: str) -> dict[str, Any]:
@@ -622,6 +701,20 @@ def prompt_safe_research(research: dict[str, Any]) -> dict[str, Any]:
         })
     if web_pages:
         safe['web_pages'] = web_pages
+    related_pages = []
+    for item in research.get('related_pages') or []:
+        if not isinstance(item, dict):
+            continue
+        related_pages.append({
+            'type': 'related_page',
+            'source_label': '関連ページ',
+            'title': sanitize_prompt_field(item.get('title')),
+            'description': sanitize_prompt_field(item.get('description')),
+            'content_excerpt': sanitize_prompt_field(item.get('content_excerpt')),
+            'status': item.get('status') or 0,
+        })
+    if related_pages:
+        safe['related_pages'] = related_pages
     x = research.get('x')
     if isinstance(x, dict):
         safe['x'] = {k: v for k, v in x.items() if k not in {'query', 'url', 'raw'}}
@@ -692,10 +785,12 @@ def build_segments(theme: str, profile: dict[str, Any], research: dict[str, Any]
     profile_text = json.dumps(enrich_profile(profile), ensure_ascii=False)[:1800]
     github_items = research.get('github') if isinstance(research, dict) else []
     web_items = research.get('web_pages') if isinstance(research, dict) else []
+    related_items = research.get('related_pages') if isinstance(research, dict) else []
     github_primary = bool(github_items)
     web_primary = bool(web_items)
-    prompt_theme = 'このGitHubリポジトリの内容' if github_primary else ('取得したWebページの内容' if web_primary else sanitize_spoken_text(theme))
-    prompt_instruction = 'このURL先の内容をテーマに解説する' if (github_primary or web_primary) else sanitize_spoken_text(instruction)
+    url_count = len(extract_urls(f'{instruction}\n{theme}'))
+    prompt_theme = '複数URL資料の内容' if url_count >= 2 else ('このGitHubリポジトリの内容' if github_primary else ('取得したWebページの内容' if web_primary else sanitize_spoken_text(theme)))
+    prompt_instruction = '入力URL先の内容を読んで考察する' if (github_primary or web_primary) else sanitize_spoken_text(instruction)
     research_text = json.dumps(prompt_safe_research(research) if isinstance(research, dict) else {}, ensure_ascii=False)[:9000]
     memory_text = json.dumps({
         'recent_topics': memory.get('topics', [])[-24:],
@@ -712,6 +807,7 @@ KurageがDJで、編集者とリスナーへ向けて静かに解説します。
 プロフィール台本を無視するか: {'はい' if ignore_profile_script else 'いいえ'}
 GitHubリポジトリを主教材として扱うか: {'はい' if github_primary else 'いいえ'}
 Webページを主教材として扱うか: {'はい' if web_primary else 'いいえ'}
+関連ページを補助資料として使うか: {'はい' if related_items else 'いいえ'}
 テーマ解釈: {guidance}
 聞き手プロフィール: {profile_text}
 情報収集メモ: {research_text}
@@ -726,6 +822,8 @@ Webページを主教材として扱うか: {'はい' if web_primary else 'い�
 - 自由入力指示がある場合は、その文章の意図を最優先する。プロフィール起点の定番台本や別テーマに勝手に戻らない。
 - 自由入力指示はフォーマットなしの自然文として扱い、「何について」「どのレベルで」「どう話してほしいか」を推測して台本化する。
 - URLが入力された場合は、URL文字列ではなく、情報収集メモ内の取得済み本文、README、title、descriptionを一次資料として扱う。
+- 複数URLが入力された場合は、各資料を別々に扱い、共通点、相違点、どの順番で理解するとよいかを整理する。
+- 関連ページがある場合は補助資料として使い、一次URLの主張を広げる。ただし一次URLの内容と関係が薄い話へ逸れない。
 - GitHubリポジトリURLが入力された場合は、情報収集メモ内のgithub項目を一次資料として扱う。READMEの内容を読んで、Claude自身が重要だと判断した点を話す。
 - 通常WebページURLが入力された場合は、情報収集メモ内のweb_pages項目を一次資料として扱う。ページ本文と説明文から主題を理解して話す。
 - URL、owner/repo、長い英数字識別子、ファイルパスは読み上げない。
@@ -820,13 +918,15 @@ def main() -> None:
     try:
         log_event('worker_started', pid=os.getpid(), theme=theme)
         update_state(research_status='collecting', loop_state='background_research', current_research_theme=theme)
-        research = collect_research(theme, instruction=instruction)
+        duration_hours = max(1, min(6, int(payload.get('duration_hours') or 1)))
+        research = collect_research(theme, instruction=instruction, duration_hours=duration_hours)
         log_event(
             'research_finished',
             theme=theme,
             ok=research.get('ok'),
             github_count=len(research.get('github') or []),
             web_count=len(research.get('web_pages') or []),
+            related_count=len(research.get('related_pages') or []),
             x_ok=(research.get('x') or {}).get('ok'),
         )
         update_state(research_status='scripting', last_research=research)
