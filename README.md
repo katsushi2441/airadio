@@ -121,6 +121,13 @@ Therefore YouTube Live receives the same generated Kurage voice that the local
 viewer hears. Public FTP deployments should use the HTTP endpoint path so the
 Apache/PHP host does not need local Python, edge-tts, or the kvtuber checkout.
 
+AIRadio avoids long silent gaps by warming TTS audio ahead of playback:
+
+- `api.php?action=start`, `interrupt`, and `next` enqueue `tts_prefetch.php` in the background.
+- `airadio_worker.py` also starts `tts_prefetch.php` after adding newly generated segments.
+- The browser prefetches the next few queued segments while the current segment is playing.
+- The first segment may still need a short preparation message because both script and audio generation can start cold.
+
 ## YouTube Live
 
 `api.php?action=youtube_start` can hand the AIRadio viewer URL to

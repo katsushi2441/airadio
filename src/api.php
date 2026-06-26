@@ -34,76 +34,6 @@ function airadio_post_json($url, $payload, $headers = []) {
     return is_array($data) ? $data : ['raw' => $raw];
 }
 
-function airadio_run_tts($text) {
-    $text = trim((string)$text);
-    if ($text === '') { bad('tts_text_required'); }
-    if (!is_dir(AIRADIO_TTS_CACHE_DIR)) { mkdir(AIRADIO_TTS_CACHE_DIR, 0775, true); }
-
-    $endpoint = defined('AIRADIO_TTS_ENDPOINT') ? (string)AIRADIO_TTS_ENDPOINT : '';
-    $hash = hash('sha256', $endpoint . "\n" . AIRADIO_TTS_VOICE . "\n" . AIRADIO_TTS_RATE . "\n" . AIRADIO_TTS_PITCH . "\n" . $text);
-    $out = AIRADIO_TTS_CACHE_DIR . '/' . $hash . '.mp3';
-    if (is_file($out) && filesize($out) > 1000) { return $out; }
-
-    $payload = json_encode([
-        'input' => $text,
-        'voice' => AIRADIO_TTS_VOICE,
-        'speed' => 1.1,
-    ], JSON_UNESCAPED_UNICODE);
-    if ($endpoint !== '') {
-        $ctx = stream_context_create(['http' => [
-            'method' => 'POST',
-            'header' => "Content-Type: application/json\r\n",
-            'content' => $payload,
-            'timeout' => 45,
-            'ignore_errors' => true,
-        ]]);
-        $audio = @file_get_contents($endpoint, false, $ctx);
-        $contentType = '';
-        if (isset($http_response_header) && is_array($http_response_header)) {
-            foreach ($http_response_header as $line) {
-                if (stripos($line, 'Content-Type:') === 0) {
-                    $contentType = strtolower(trim(substr($line, 13)));
-                    break;
-                }
-            }
-        }
-        if (is_string($audio) && strlen($audio) > 1000 && strpos($contentType, 'audio/') === 0) {
-            file_put_contents($out, $audio);
-            return $out;
-        }
-    }
-
-    if (!is_file(AIRADIO_TTS_SCRIPT)) {
-        bad('tts_script_not_found', 500, ['script' => AIRADIO_TTS_SCRIPT, 'endpoint' => $endpoint]);
-    }
-    $cmd = 'env'
-        . ' KURAGE_TTS_VOICE=' . escapeshellarg(AIRADIO_TTS_VOICE)
-        . ' KURAGE_TTS_RATE=' . escapeshellarg(AIRADIO_TTS_RATE)
-        . ' KURAGE_TTS_PITCH=' . escapeshellarg(AIRADIO_TTS_PITCH)
-        . ' KURAGE_TTS_NORMALIZER_DIR=' . escapeshellarg('/home/kojima/work/kurage/backend')
-        . ' ' . escapeshellarg(AIRADIO_TTS_PYTHON)
-        . ' ' . escapeshellarg(AIRADIO_TTS_SCRIPT)
-        . ' --output ' . escapeshellarg($out);
-    $proc = proc_open($cmd, [
-        0 => ['pipe', 'r'],
-        1 => ['pipe', 'w'],
-        2 => ['pipe', 'w'],
-    ], $pipes, dirname(AIRADIO_TTS_SCRIPT));
-    if (!is_resource($proc)) { bad('tts_process_failed', 500); }
-    fwrite($pipes[0], $payload);
-    fclose($pipes[0]);
-    $stdout = stream_get_contents($pipes[1]);
-    fclose($pipes[1]);
-    $stderr = stream_get_contents($pipes[2]);
-    fclose($pipes[2]);
-    $code = proc_close($proc);
-    if ($code !== 0 || !is_file($out) || filesize($out) <= 1000) {
-        @unlink($out);
-        bad('tts_failed', 500, ['code' => $code, 'stderr' => substr((string)$stderr, -1000), 'stdout' => substr((string)$stdout, -500)]);
-    }
-    return $out;
-}
-
 function airadio_default_stream_key() {
     $env = trim((string)getenv('YOUTUBE_STREAM_KEY'));
     if ($env !== '') { return $env; }
@@ -145,7 +75,11 @@ if ($action === 'current') {
 
 if ($action === 'tts') {
     $text = isset($input['text']) ? (string)$input['text'] : '';
-    $path = airadio_run_tts($text);
+    try {
+        $path = airadio_tts_audio_path($text);
+    } catch (Throwable $e) {
+        bad('tts_failed', 500, ['message' => $e->getMessage()]);
+    }
     header('Content-Type: audio/mpeg');
     header('Content-Length: ' . filesize($path));
     header('Cache-Control: private, max-age=86400');
@@ -194,8 +128,9 @@ if ($action === 'start') {
     $items = array_merge($items, airadio_seed_profile_program($theme, $profile));
     $queue = ['items' => $items, 'updated_at' => date('c')];
     airadio_write_json(AIRADIO_QUEUE_FILE, $queue);
+    $ttsPid = airadio_start_tts_prefetch($items, 'start');
     $pid = airadio_start_worker($theme, $profile, 'start');
-    ok(['state' => $state, 'worker_pid' => $pid]);
+    ok(['state' => $state, 'worker_pid' => $pid, 'tts_prefetch_pid' => $ttsPid, 'prefetch_items' => array_slice($items, 0, AIRADIO_TTS_PREFETCH_LIMIT)]);
 }
 
 if ($action === 'stop') {
@@ -210,18 +145,20 @@ if ($action === 'interrupt') {
     $theme = trim((string)(isset($input['theme']) ? $input['theme'] : ''));
     if ($theme === '') { bad('theme_required'); }
     $queue = airadio_queue();
-    array_unshift($queue['items'], [
+    $interruptItem = [
         'id' => 'interrupt-' . time(),
         'theme' => $theme,
         'title' => 'テーマ割り込み',
         'text' => 'テーマを切り替えます。ここからは、' . $theme . 'について、静かに考えていきます。すぐに結論を急がず、背景、論点、実践の順に、ゆっくり眺めていきましょう。裏側では関連情報の収集を始めています。',
         'source' => 'interrupt',
         'created_at' => date('c'),
-    ]);
+    ];
+    array_unshift($queue['items'], $interruptItem);
     airadio_write_json(AIRADIO_QUEUE_FILE, $queue);
+    $ttsPid = airadio_start_tts_prefetch([$interruptItem], 'interrupt');
     $state = airadio_update_state(['theme' => $theme, 'research_status' => 'queued', 'loop_state' => 'theme_interrupt']);
     $pid = airadio_start_worker($theme, airadio_profile_from_session(), 'interrupt');
-    ok(['state' => $state, 'worker_pid' => $pid, 'queue' => $queue]);
+    ok(['state' => $state, 'worker_pid' => $pid, 'tts_prefetch_pid' => $ttsPid, 'queue' => $queue]);
 }
 
 if ($action === 'next') {
@@ -259,11 +196,15 @@ if ($action === 'next') {
     }
     $queue['items'] = $items;
     airadio_write_json(AIRADIO_QUEUE_FILE, $queue);
+    $upcoming = array_slice($items, 0, AIRADIO_TTS_PREFETCH_LIMIT);
+    if (!empty($upcoming)) {
+        airadio_start_tts_prefetch($upcoming, 'next');
+    }
     $patch = ['now_talking' => isset($item['title']) ? $item['title'] : '', 'loop_state' => 'speaking'];
     if (isset($bridgeCount)) { $patch['bridge_count'] = $bridgeCount; }
     $current = airadio_set_current_segment($item);
     airadio_update_state($patch);
-    ok(['item' => $item, 'current' => $current, 'queue_remaining' => count($items), 'state' => airadio_state()]);
+    ok(['item' => $item, 'current' => $current, 'queue_remaining' => count($items), 'prefetch_items' => $upcoming, 'state' => airadio_state()]);
 }
 
 if ($action === 'youtube_start') {

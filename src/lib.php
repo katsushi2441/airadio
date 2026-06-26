@@ -104,6 +104,113 @@ function airadio_append_log($message, $data = []) {
     file_put_contents(AIRADIO_LOG_FILE, $line, FILE_APPEND | LOCK_EX);
 }
 
+function airadio_tts_audio_path($text) {
+    $text = trim((string)$text);
+    if ($text === '') { throw new RuntimeException('tts_text_required'); }
+    if (!is_dir(AIRADIO_TTS_CACHE_DIR)) { mkdir(AIRADIO_TTS_CACHE_DIR, 0775, true); }
+
+    $endpoint = defined('AIRADIO_TTS_ENDPOINT') ? (string)AIRADIO_TTS_ENDPOINT : '';
+    $hash = hash('sha256', $endpoint . "\n" . AIRADIO_TTS_VOICE . "\n" . AIRADIO_TTS_RATE . "\n" . AIRADIO_TTS_PITCH . "\n" . $text);
+    $out = AIRADIO_TTS_CACHE_DIR . '/' . $hash . '.mp3';
+    if (is_file($out) && filesize($out) > 1000) { return $out; }
+
+    $payload = json_encode([
+        'input' => $text,
+        'voice' => AIRADIO_TTS_VOICE,
+        'speed' => 1.1,
+    ], JSON_UNESCAPED_UNICODE);
+    if ($endpoint !== '') {
+        $ctx = stream_context_create(['http' => [
+            'method' => 'POST',
+            'header' => "Content-Type: application/json\r\n",
+            'content' => $payload,
+            'timeout' => 45,
+            'ignore_errors' => true,
+        ]]);
+        $audio = @file_get_contents($endpoint, false, $ctx);
+        $contentType = '';
+        if (isset($http_response_header) && is_array($http_response_header)) {
+            foreach ($http_response_header as $line) {
+                if (stripos($line, 'Content-Type:') === 0) {
+                    $contentType = strtolower(trim(substr($line, 13)));
+                    break;
+                }
+            }
+        }
+        if (is_string($audio) && strlen($audio) > 1000 && strpos($contentType, 'audio/') === 0) {
+            file_put_contents($out, $audio, LOCK_EX);
+            return $out;
+        }
+    }
+
+    if (!is_file(AIRADIO_TTS_SCRIPT)) {
+        throw new RuntimeException('tts_script_not_found: ' . AIRADIO_TTS_SCRIPT);
+    }
+    $cmd = 'env'
+        . ' KURAGE_TTS_VOICE=' . escapeshellarg(AIRADIO_TTS_VOICE)
+        . ' KURAGE_TTS_RATE=' . escapeshellarg(AIRADIO_TTS_RATE)
+        . ' KURAGE_TTS_PITCH=' . escapeshellarg(AIRADIO_TTS_PITCH)
+        . ' KURAGE_TTS_NORMALIZER_DIR=' . escapeshellarg('/home/kojima/work/kurage/backend')
+        . ' ' . escapeshellarg(AIRADIO_TTS_PYTHON)
+        . ' ' . escapeshellarg(AIRADIO_TTS_SCRIPT)
+        . ' --output ' . escapeshellarg($out);
+    $proc = proc_open($cmd, [
+        0 => ['pipe', 'r'],
+        1 => ['pipe', 'w'],
+        2 => ['pipe', 'w'],
+    ], $pipes, dirname(AIRADIO_TTS_SCRIPT));
+    if (!is_resource($proc)) { throw new RuntimeException('tts_process_failed'); }
+    fwrite($pipes[0], $payload);
+    fclose($pipes[0]);
+    $stdout = stream_get_contents($pipes[1]);
+    fclose($pipes[1]);
+    $stderr = stream_get_contents($pipes[2]);
+    fclose($pipes[2]);
+    $code = proc_close($proc);
+    if ($code !== 0 || !is_file($out) || filesize($out) <= 1000) {
+        @unlink($out);
+        throw new RuntimeException('tts_failed: ' . substr((string)$stderr . ' ' . (string)$stdout, -1000));
+    }
+    return $out;
+}
+
+function airadio_prefetch_payload_path($reason) {
+    $safeReason = preg_replace('/[^A-Za-z0-9_-]/', '_', (string)$reason);
+    return AIRADIO_STORAGE_DIR . '/tts_prefetch_' . $safeReason . '_' . time() . '_' . substr(sha1((string)microtime(true)), 0, 8) . '.json';
+}
+
+function airadio_start_tts_prefetch($items, $reason = 'queue') {
+    if (!is_array($items) || empty($items)) { return ''; }
+    $limited = [];
+    foreach ($items as $item) {
+        if (!is_array($item)) { continue; }
+        $text = trim((string)(isset($item['text']) ? $item['text'] : ''));
+        if ($text === '') { continue; }
+        $limited[] = [
+            'id' => isset($item['id']) ? (string)$item['id'] : '',
+            'title' => isset($item['title']) ? (string)$item['title'] : '',
+            'text' => $text,
+        ];
+        if (count($limited) >= AIRADIO_TTS_PREFETCH_LIMIT) { break; }
+    }
+    if (empty($limited)) { return ''; }
+    $payload = airadio_prefetch_payload_path($reason);
+    airadio_write_json($payload, ['reason' => $reason, 'items' => $limited, 'created_at' => date('c')]);
+    $php = getenv('AIRADIO_PHP_BINARY') ?: AIRADIO_PHP_BINARY;
+    $cmd = sprintf(
+        'cd %s && nohup %s %s --payload %s >> %s 2>&1 & echo $!',
+        escapeshellarg(dirname(__DIR__)),
+        escapeshellcmd($php),
+        escapeshellarg(__DIR__ . '/tts_prefetch.php'),
+        escapeshellarg($payload),
+        escapeshellarg(AIRADIO_LOG_FILE)
+    );
+    $pid = trim((string)shell_exec($cmd));
+    airadio_append_log('tts_prefetch_started', ['pid' => $pid, 'reason' => $reason, 'count' => count($limited)]);
+    airadio_update_state(['tts_status' => 'prefetching', 'tts_prefetch_reason' => $reason]);
+    return $pid;
+}
+
 function airadio_profile_from_session() {
     $profile = airadio_fetch_x_profile(AIRADIO_ALLOWED_USER);
     if (session_status() !== PHP_SESSION_ACTIVE) { @session_start(); }

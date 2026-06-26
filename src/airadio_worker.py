@@ -19,6 +19,7 @@ QUEUE = STORAGE / 'script_queue.json'
 STATE = STORAGE / 'radio_state.json'
 LOCK = STORAGE / 'worker.lock'
 MEMORY = STORAGE / 'talk_memory.json'
+TTS_PREFETCH_SCRIPT = ROOT / 'src' / 'tts_prefetch.php'
 KAGENTREACH = Path(os.environ.get('AIRADIO_KAGENTREACH_DIR', '/home/kojima/work/kagentreach'))
 OLLAMA_URL = os.environ.get('AIRADIO_OLLAMA_URL', 'http://192.168.0.3:11434/api/generate')
 OLLAMA_MODEL = os.environ.get('AIRADIO_OLLAMA_MODEL', 'gemma4:12b-it-qat')
@@ -64,6 +65,40 @@ def append_queue(items: list[dict[str, Any]]) -> None:
     queue['items'] = existing[-80:]
     queue['updated_at'] = time.strftime('%Y-%m-%dT%H:%M:%S%z')
     write_json(QUEUE, queue)
+
+
+def start_tts_prefetch(items: list[dict[str, Any]], reason: str) -> None:
+    if not items or not TTS_PREFETCH_SCRIPT.exists():
+        return
+    payload_path = STORAGE / f'tts_prefetch_worker_{int(time.time())}_{os.getpid()}.json'
+    limited = []
+    for item in items[:4]:
+        text = str(item.get('text') or '').strip()
+        if not text:
+            continue
+        limited.append({
+            'id': str(item.get('id') or ''),
+            'title': str(item.get('title') or ''),
+            'text': text,
+        })
+    if not limited:
+        return
+    write_json(payload_path, {
+        'reason': reason,
+        'items': limited,
+        'created_at': time.strftime('%Y-%m-%dT%H:%M:%S%z'),
+    })
+    php = os.environ.get('AIRADIO_PHP_BINARY', 'php')
+    log_path = str(STORAGE / 'radio_loop.log')
+    with open(log_path, 'ab', buffering=0) as log:
+        subprocess.Popen(
+            [php, str(TTS_PREFETCH_SCRIPT), '--payload', str(payload_path)],
+            cwd=str(ROOT),
+            stdout=log,
+            stderr=log,
+            start_new_session=True,
+        )
+    log_event('tts_prefetch_started', reason=reason, count=len(limited))
 
 
 def normalize_text(text: str) -> str:
@@ -406,12 +441,14 @@ def main() -> None:
         update_state(research_status='scripting', last_research=research)
         segments = build_segments(theme, profile, research)
         append_queue(segments)
+        start_tts_prefetch(segments, 'worker')
         log_event('segments_appended', theme=theme, count=len(segments), sources=sorted({str(s.get('source')) for s in segments}))
         update_state(research_status='ready', loop_state='queue_refilled', last_segments=len(segments), current_research_theme=theme)
     except Exception as exc:
         # The foreground radio must keep talking even if research or LLM generation fails.
         segments = fallback_segments(theme)
         append_queue(segments)
+        start_tts_prefetch(segments, 'worker_fallback')
         log_event('worker_failed_fallback_appended', theme=theme, error=str(exc)[-800:], count=len(segments))
         update_state(
             research_status='fallback',

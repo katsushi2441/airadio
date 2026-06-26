@@ -62,6 +62,9 @@ const commentsBox = document.getElementById('comments');
 const researchStatus = document.getElementById('researchStatus');
 const meter = document.getElementById('meter');
 let running = false; let endsAt = 0; let speaking = false; let lastCurrentId = ''; let currentAudio = null; let hasDefaultStreamKey = false;
+const audioCache = new Map();
+const audioPrefetching = new Set();
+const audioPromises = new Map();
 const bridgeTexts = ['少しだけ、静かな間を置きます。考えは急がなくて大丈夫です。','裏側で情報を集めています。こちらでは、今のテーマをゆっくりほどいていきます。'];
 function log(msg){ const el=document.createElement('div'); el.className='segment'; el.textContent=new Date().toLocaleTimeString()+'  '+msg; loopLog.prepend(el); }
 function setMouth(on){ avatar.src = on ? 'assets/kurage_radio_talk.png' : 'assets/kurage_radio_idle.png'; avatar.classList.toggle('talking', on); meter.style.width = on ? '78%' : '18%'; }
@@ -74,26 +77,60 @@ function stopCurrentAudio(){
   speaking = false;
   setMouth(false);
 }
+function audioKey(text){ return (text || '').trim(); }
+async function fetchAudioUrl(text, purpose='play'){
+  const key = audioKey(text);
+  if (!key) throw new Error('empty audio text');
+  if (audioCache.has(key)) return audioCache.get(key);
+  if (audioPromises.has(key)) return audioPromises.get(key);
+  if (purpose === 'prefetch' && audioPrefetching.has(key)) return null;
+  if (purpose === 'prefetch') audioPrefetching.add(key);
+  const promise = (async()=>{
+    const res = await fetch('api.php?action=tts', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text:key})});
+    if (!res.ok) throw new Error('TTS HTTP '+res.status);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    audioCache.set(key, url);
+    if (audioCache.size > 16) {
+      const oldest = audioCache.keys().next().value;
+      URL.revokeObjectURL(audioCache.get(oldest));
+      audioCache.delete(oldest);
+    }
+    return url;
+  })();
+  audioPromises.set(key, promise);
+  try {
+    return await promise;
+  } finally {
+    audioPromises.delete(key);
+    audioPrefetching.delete(key);
+  }
+}
+function prefetchItems(items){
+  (items || []).slice(0, 3).forEach(item => {
+    const text = item?.text || '';
+    if (!audioKey(text) || audioCache.has(audioKey(text))) return;
+    fetchAudioUrl(text, 'prefetch').then(()=>log('音声先読み完了: '+(item.title||'次の話題'))).catch(e=>log('音声先読み待機: '+(e.message||e)));
+  });
+}
 function speakText(text, title=''){
   return new Promise(async resolve=>{
     stopCurrentAudio();
     nowTalking.textContent=title||'話しています';
     currentText.textContent=text;
-    let url = '';
     try {
-      const res = await fetch('api.php?action=tts', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text})});
-      if (!res.ok) throw new Error('TTS HTTP '+res.status);
-      const blob = await res.blob();
-      url = URL.createObjectURL(blob);
+      if (!audioCache.has(audioKey(text))) {
+        researchStatus.textContent='voice: generating audio...';
+      }
+      const url = await fetchAudioUrl(text, 'play');
       const audio = new Audio(url);
       currentAudio = audio;
       audio.onplay=()=>{ speaking=true; setMouth(true); };
-      audio.onended=()=>{ if (currentAudio === audio) currentAudio = null; speaking=false; setMouth(false); URL.revokeObjectURL(url); resolve(); };
-      audio.onerror=()=>{ if (currentAudio === audio) currentAudio = null; speaking=false; setMouth(false); if (url) URL.revokeObjectURL(url); resolve(); };
+      audio.onended=()=>{ if (currentAudio === audio) currentAudio = null; speaking=false; setMouth(false); resolve(); };
+      audio.onerror=()=>{ if (currentAudio === audio) currentAudio = null; speaking=false; setMouth(false); resolve(); };
       await audio.play();
     } catch(e) {
       log('TTS再生に失敗しました: '+(e.message||e));
-      if (url) URL.revokeObjectURL(url);
       speaking=false; setMouth(false); resolve();
     }
   });
@@ -102,8 +139,9 @@ async function radioLoop(){
   while(running && Date.now() < endsAt){
     let d; try { d = await api('next'); } catch(e) { d = {item:{title:'ブリッジ',text:bridgeTexts[Math.floor(Math.random()*bridgeTexts.length)]}}; }
     const item = d.item || {}; log(`${item.source||'segment'}: ${item.title||''}`);
+    prefetchItems(d.prefetch_items || []);
     await speakText(item.text || bridgeTexts[0], item.title || 'Kurage Radio');
-    await new Promise(r=>setTimeout(r, 900));
+    await new Promise(r=>setTimeout(r, 200));
   }
   running=false; nowTalking.textContent='終了しました'; setMouth(false);
 }
@@ -146,10 +184,10 @@ function renderComments(items){
     commentsBox.appendChild(el);
   });
 }
-async function refresh(){ try{ const d=await api('status'); const s=d.state||{}; const q=(d.queue?.items||[]).length; const current=d.current?.item; hasDefaultStreamKey = !!d.youtube?.has_default_stream_key; researchStatus.textContent=`research: ${s.research_status||'idle'} / queue: ${q} / ${s.status||'idle'}${hasDefaultStreamKey ? ' / YouTube key: saved' : ''}`; renderComments(d.comments?.items||[]); if(!running && current?.title){ nowTalking.textContent=current.title; currentText.textContent=current.text||''; } }catch(e){} }
+async function refresh(){ try{ const d=await api('status'); const s=d.state||{}; const q=(d.queue?.items||[]).length; const current=d.current?.item; hasDefaultStreamKey = !!d.youtube?.has_default_stream_key; researchStatus.textContent=`research: ${s.research_status||'idle'} / tts: ${s.tts_status||'idle'} / queue: ${q} / ${s.status||'idle'}${hasDefaultStreamKey ? ' / YouTube key: saved' : ''}`; renderComments(d.comments?.items||[]); prefetchItems(d.queue?.items||[]); if(!running && current?.title){ nowTalking.textContent=current.title; currentText.textContent=current.text||''; } }catch(e){} }
 setInterval(refresh, 4000); refresh();
 if (IS_ADMIN) {
-  document.getElementById('startBtn').onclick=async()=>{ const theme=document.getElementById('theme').value.trim(); const hours=Number(document.getElementById('hours').value||1); const d=await api('start',{theme,duration_hours:hours}); endsAt = Date.now()+hours*3600*1000; running=true; log('radio started'); radioLoop(); };
+  document.getElementById('startBtn').onclick=async()=>{ const theme=document.getElementById('theme').value.trim(); const hours=Number(document.getElementById('hours').value||1); nowTalking.textContent='初回音声を準備中'; currentText.textContent='最初の台本と音声を準備しています。ここだけ少し時間がかかります。始まった後は、次の音声をバックグラウンドで先読みして、できるだけ間が空かないようにします。'; const d=await api('start',{theme,duration_hours:hours}); prefetchItems(d.prefetch_items||[]); endsAt = Date.now()+hours*3600*1000; running=true; log('radio started'); radioLoop(); };
   document.getElementById('interruptBtn').onclick=async()=>{ const theme=document.getElementById('theme').value.trim(); if(!theme){ log('割り込みテーマを入力してください'); return; } await api('interrupt',{theme}); log('theme interrupted: '+theme); };
   document.getElementById('stopBtn').onclick=async()=>{ running=false; stopCurrentAudio(); await api('stop'); log('stopped'); nowTalking.textContent='停止中'; setMouth(false); };
   document.getElementById('youtubeStartBtn').onclick=async()=>{ const stream_key=document.getElementById('streamKey').value.trim(); if(!stream_key && !hasDefaultStreamKey){ log('YouTube Live ストリームキーを入力してください'); return; } const d=await api('youtube_start',{stream_key,viewer_url:location.href.split('#')[0]}); log(d.ok?'YouTube配信を開始しました':'YouTube配信開始に失敗しました'); };
