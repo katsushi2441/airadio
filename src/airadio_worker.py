@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
 import re
@@ -237,6 +238,69 @@ def strip_markdown_noise(text: str) -> str:
     return text.strip()
 
 
+def is_github_repo_url(url: str) -> bool:
+    return bool(re.search(r'https?://github\.com/[^/\s]+/[^/\s?#]+', url or '', re.I))
+
+
+def strip_html_noise(body: str) -> str:
+    text = re.sub(r'(?is)<(script|style|noscript|svg|canvas|iframe)\b.*?</\1>', ' ', body or '')
+    text = re.sub(r'(?is)<!--.*?-->', ' ', text)
+    text = re.sub(r'(?i)<br\s*/?>', '\n', text)
+    text = re.sub(r'(?i)</(p|div|section|article|li|h[1-6]|tr)>', '\n', text)
+    text = re.sub(r'(?is)<[^>]+>', ' ', text)
+    text = html.unescape(text)
+    text = re.sub(r'https?://[^\s「」『』"\'`<>]+', ' ', text)
+    text = re.sub(r'[ \t\r\f\v]+', ' ', text)
+    text = re.sub(r'\n\s*\n+', '\n', text)
+    return text.strip()
+
+
+def extract_html_field(body: str, pattern: str) -> str:
+    match = re.search(pattern, body or '', re.I | re.S)
+    if not match:
+        return ''
+    return strip_html_noise(match.group(1))[:600]
+
+
+def fetch_url_content(url: str) -> dict[str, Any]:
+    status, body = http_get_text(url, timeout=20, accept='text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8')
+    title = extract_html_field(body, r'<title[^>]*>(.*?)</title>')
+    description = (
+        extract_html_field(body, r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']+)["\']')
+        or extract_html_field(body, r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+name=["\']description["\']')
+        or extract_html_field(body, r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']+)["\']')
+        or extract_html_field(body, r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:description["\']')
+    )
+    og_title = (
+        extract_html_field(body, r'<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)["\']')
+        or extract_html_field(body, r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:title["\']')
+    )
+    content = strip_html_noise(body)
+    return {
+        'type': 'web_page',
+        'ok': status < 400 and bool(content),
+        'url': url,
+        'source_label': '参照URLのページ',
+        'title': title or og_title,
+        'description': description,
+        'content_excerpt': content[:7000],
+        'status': status,
+        'fetched_at': time.strftime('%Y-%m-%dT%H:%M:%S%z'),
+    }
+
+
+def run_url_research(text: str) -> list[dict[str, Any]]:
+    results = []
+    for url in extract_urls(text):
+        if is_github_repo_url(url):
+            continue
+        try:
+            results.append(fetch_url_content(url))
+        except Exception as exc:
+            results.append({'type': 'web_page', 'ok': False, 'source_label': '参照URLのページ', 'url': url, 'error': str(exc)})
+    return results[:3]
+
+
 def summarize_readme_locally(readme: str, limit: int = 3600) -> str:
     clean = strip_markdown_noise(readme)
     lines = []
@@ -249,7 +313,7 @@ def summarize_readme_locally(readme: str, limit: int = 3600) -> str:
         important = (
             keep_next
             or any(key in low for key in ['why', 'who this is for', 'learning paths', 'study suggestions', 'run locally', 'stage', 'beginner', 'advanced', 'vibe', 'ai era'])
-            or re.match(r'^(want|need|easy-vibe|complete beginners|product managers|students|junior|mid-level|best for|what you will learn|what you will get)', line, re.I)
+            or re.match(r'^(want|need|complete beginners|product managers|students|junior|mid-level|best for|what you will learn|what you will get)', line, re.I)
         )
         if important:
             lines.append(line)
@@ -311,7 +375,7 @@ def run_github_research(text: str) -> list[dict[str, Any]]:
     return results
 
 
-def research_query_from_theme(theme: str, github_items: list[dict[str, Any]]) -> str:
+def research_query_from_theme(theme: str, github_items: list[dict[str, Any]], web_pages: list[dict[str, Any]] | None = None) -> str:
     if github_items:
         repo = str(github_items[0].get('repo') or '')
         desc = str(github_items[0].get('description') or '')
@@ -327,22 +391,38 @@ def research_query_from_theme(theme: str, github_items: list[dict[str, Any]]) ->
                 break
         if picked:
             return ' '.join(picked)
+    if web_pages:
+        page = web_pages[0]
+        text = f"{page.get('title') or ''} {page.get('description') or ''} {page.get('content_excerpt') or ''}"
+        words = re.findall(r'[A-Za-z][A-Za-z0-9_-]{2,}|[\u3040-\u30ff\u3400-\u9fff]{2,}', text)
+        picked = []
+        for word in words:
+            if word.lower() in {'https', 'http', 'www', 'com', 'html'}:
+                continue
+            if word not in picked:
+                picked.append(word)
+            if len(picked) >= 8:
+                break
+        if picked:
+            return ' '.join(picked)
     return theme
 
 
 def collect_research(theme: str, instruction: str = '') -> dict[str, Any]:
     source_text = f'{instruction}\n{theme}'
     github_items = run_github_research(source_text)
-    x_query = research_query_from_theme(theme, github_items)
+    web_pages = run_url_research(source_text)
+    x_query = research_query_from_theme(theme, github_items, web_pages)
     x_result = run_x_search(x_query)
     return {
-        'ok': bool(github_items) or bool(x_result.get('ok')),
+        'ok': bool(github_items) or bool(web_pages) or bool(x_result.get('ok')),
         'theme': theme,
         'instruction': instruction,
         'github': github_items,
+        'web_pages': web_pages,
         'x_query': x_query,
         'x': x_result,
-        'notes': 'GitHub URLs are treated as primary source material; X search is supplemental signal only.',
+        'notes': 'URLs are fetched first and treated as primary source material; X search is supplemental signal only.',
     }
 
 def run_x_search(theme: str) -> dict[str, Any]:
@@ -469,16 +549,83 @@ def theme_guidance(theme: str) -> str:
 
 
 
-def sanitize_spoken_text(text: str) -> str:
+def sanitize_spoken_text(text: str, github_items: list[dict[str, Any]] | None = None) -> str:
     text = re.sub(r'https?://[^\s「」『』"\'`<>]+', '', text or '')
     text = text.replace('xb_bittensorさん', '編集者さん').replace('xb_bittensor', '編集者')
+    patterns = [r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+']
+    for item in github_items or []:
+        repo = str(item.get('repo') or '')
+        if repo:
+            patterns.append(re.escape(repo))
+            patterns.append(re.escape(repo.split('/')[-1]))
+    for pattern in patterns:
+        text = re.sub(pattern, 'このリポジトリ', text, flags=re.I)
     text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r'このリポジトリ(\s*このリポジトリ)+', 'このリポジトリ', text)
     text = re.sub(r'\s+([。、,.])', r'\1', text)
     return text.strip()
 
 
 
+def sanitize_prompt_field(value: Any) -> str:
+    text = str(value or '')
+    text = re.sub(r'https?://[^\s「」『』"\'`<>]+', '', text)
+    text = re.sub(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', 'このリポジトリ', text)
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
+
+def prompt_safe_research(research: dict[str, Any]) -> dict[str, Any]:
+    safe: dict[str, Any] = {
+        'ok': bool(research.get('ok')),
+        'notes': 'Raw URLs and owner/repo identifiers are intentionally omitted from prompt text. Use fetched page text, README, and metadata only.',
+    }
+    github = []
+    for item in research.get('github') or []:
+        if not isinstance(item, dict):
+            continue
+        raw_repo = str(item.get('repo') or '')
+        raw_name = raw_repo.split('/')[-1] if raw_repo else ''
+        def clean(value: Any) -> str:
+            cleaned = sanitize_prompt_field(value)
+            if raw_name:
+                cleaned = re.sub(re.escape(raw_name), 'この教材', cleaned, flags=re.I)
+            return cleaned
+        github.append({
+            'type': 'github_repo',
+            'source_label': 'このGitHubリポジトリ',
+            'description': clean(item.get('description')),
+            'stars': item.get('stars') or 0,
+            'language': clean(item.get('language')),
+            'license': clean(item.get('license')),
+            'readme_summary': clean(item.get('readme_summary')),
+            'readme_excerpt': clean(item.get('readme_excerpt')),
+        })
+    if github:
+        safe['github'] = github
+    web_pages = []
+    for item in research.get('web_pages') or []:
+        if not isinstance(item, dict):
+            continue
+        web_pages.append({
+            'type': 'web_page',
+            'source_label': '参照URLのページ',
+            'title': sanitize_prompt_field(item.get('title')),
+            'description': sanitize_prompt_field(item.get('description')),
+            'content_excerpt': sanitize_prompt_field(item.get('content_excerpt')),
+            'status': item.get('status') or 0,
+        })
+    if web_pages:
+        safe['web_pages'] = web_pages
+    x = research.get('x')
+    if isinstance(x, dict):
+        safe['x'] = {k: v for k, v in x.items() if k not in {'query', 'url', 'raw'}}
+    return safe
+
+
+
 def theme_for_speech(theme: str) -> str:
+    if extract_urls(theme or ''):
+        return 'この資料'
     if re.search(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', theme or ''):
         return 'このリポジトリ'
     cleaned = re.sub(r'https?://[^\s「」『』"\'`<>]+', '', theme or '')
@@ -537,9 +684,13 @@ def build_segments(theme: str, profile: dict[str, Any], research: dict[str, Any]
     memory = load_memory()
     guidance = theme_guidance(theme)
     profile_text = json.dumps(enrich_profile(profile), ensure_ascii=False)[:1800]
-    research_text = json.dumps(research, ensure_ascii=False)[:9000]
     github_items = research.get('github') if isinstance(research, dict) else []
+    web_items = research.get('web_pages') if isinstance(research, dict) else []
     github_primary = bool(github_items)
+    web_primary = bool(web_items)
+    prompt_theme = 'このGitHubリポジトリの内容' if github_primary else ('取得したWebページの内容' if web_primary else sanitize_spoken_text(theme))
+    prompt_instruction = 'このURL先の内容をテーマに解説する' if (github_primary or web_primary) else sanitize_spoken_text(instruction)
+    research_text = json.dumps(prompt_safe_research(research) if isinstance(research, dict) else {}, ensure_ascii=False)[:9000]
     memory_text = json.dumps({
         'recent_topics': memory.get('topics', [])[-24:],
         'recent_texts': memory.get('recent_texts', [])[-10:],
@@ -550,10 +701,11 @@ KurageがDJで、編集者とリスナーへ向けて静かに解説します。
 自由入力指示がある場合は、そのテーマだけを主題にします。資料や指示に書かれていない文脈を勝手に足さないでください。
 自由入力指示がない場合だけ、聞き手プロフィールを参考にテーマを広げてください。
 
-テーマ: {theme}
-編集者の自由入力指示: {instruction or 'なし'}
+テーマ: {prompt_theme}
+編集者の自由入力指示: {prompt_instruction or 'なし'}
 プロフィール台本を無視するか: {'はい' if ignore_profile_script else 'いいえ'}
 GitHubリポジトリを主教材として扱うか: {'はい' if github_primary else 'いいえ'}
+Webページを主教材として扱うか: {'はい' if web_primary else 'いいえ'}
 テーマ解釈: {guidance}
 聞き手プロフィール: {profile_text}
 情報収集メモ: {research_text}
@@ -567,8 +719,11 @@ GitHubリポジトリを主教材として扱うか: {'はい' if github_primary
 - テーマと資料の内容を、リスナーにも分かる自然な解説へ変換する。
 - 自由入力指示がある場合は、その文章の意図を最優先する。プロフィール起点の定番台本や別テーマに勝手に戻らない。
 - 自由入力指示はフォーマットなしの自然文として扱い、「何について」「どのレベルで」「どう話してほしいか」を推測して台本化する。
-- GitHubリポジトリURLが入力された場合は、情報収集メモ内のgithub項目を一次資料として扱う。READMEの内容を読んで、Claude自身が重要だと判断した点を話す。URL、owner/repo、長い英数字識別子は読み上げない。
-- GitHub主教材の場合、各segmentの角度は repository_overview, why_it_matters, learning_path, practical_use, caveats, editor_action のように、資料の中身に沿って分ける。
+- URLが入力された場合は、URL文字列ではなく、情報収集メモ内の取得済み本文、README、title、descriptionを一次資料として扱う。
+- GitHubリポジトリURLが入力された場合は、情報収集メモ内のgithub項目を一次資料として扱う。READMEの内容を読んで、Claude自身が重要だと判断した点を話す。
+- 通常WebページURLが入力された場合は、情報収集メモ内のweb_pages項目を一次資料として扱う。ページ本文と説明文から主題を理解して話す。
+- URL、owner/repo、長い英数字識別子、ファイルパスは読み上げない。
+- URL主教材の場合、各segmentの角度は overview, why_it_matters, key_points, practical_use, caveats, editor_action のように、資料の中身に沿って分ける。
 - 1本あたり60〜120秒程度で読める長さ。
 - 同じ言い回し、同じ結論、同じブリッジトークは禁止。
 - 抽象論だけで終わらせない。ただし資料や指示にない話題を無理に足さない。
@@ -588,7 +743,7 @@ GitHubリポジトリを主教材として扱うか: {'はい' if github_primary
         try:
             parsed = runner(prompt)
             out = normalize_segments(parsed, theme, provider, memory)
-            if github_primary:
+            if github_primary or web_primary:
                 for item in out:
                     item['text'] = sanitize_spoken_text(str(item.get('text') or ''), github_items)
                     item['title'] = sanitize_spoken_text(str(item.get('title') or ''), github_items)
@@ -665,6 +820,7 @@ def main() -> None:
             theme=theme,
             ok=research.get('ok'),
             github_count=len(research.get('github') or []),
+            web_count=len(research.get('web_pages') or []),
             x_ok=(research.get('x') or {}).get('ok'),
         )
         update_state(research_status='scripting', last_research=research)

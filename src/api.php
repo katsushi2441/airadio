@@ -197,12 +197,13 @@ if ($action === 'next') {
     $item = array_shift($items);
     if (!$item) {
         $theme = isset($state['theme']) ? $state['theme'] : 'AI思考';
+        $spokenTheme = airadio_spoken_theme_title($theme);
         $bridgeCount = isset($state['bridge_count']) ? ((int)$state['bridge_count'] + 1) : 1;
         $bridgeTexts = [
-            $theme . 'について、次の台本を待つあいだに全体像を短く整理します。資料にあることと、まだ分からないことを分けて聞くと理解しやすくなります。',
-            $theme . 'を別の角度から見ます。大事なのは、名前の印象ではなく、何を説明しようとしているのかを押さえることです。',
-            $theme . 'の話を聞くときは、背景、仕組み、使いどころ、注意点に分けると、内容がほどけていきます。',
-            $theme . 'について、次に確認したい問いを一つ置きます。この資料は、誰のどんな課題に役立つのか。そこから見ていきます。',
+            $spokenTheme . 'について、次の台本を待つあいだに全体像を短く整理します。資料にあることと、まだ分からないことを分けて聞くと理解しやすくなります。',
+            $spokenTheme . 'を別の角度から見ます。大事なのは、名前の印象ではなく、何を説明しようとしているのかを押さえることです。',
+            $spokenTheme . 'の話を聞くときは、背景、仕組み、使いどころ、注意点に分けると、内容がほどけていきます。',
+            $spokenTheme . 'について、次に確認したい問いを一つ置きます。この資料は、誰のどんな課題に役立つのか。そこから見ていきます。',
         ];
         $bridgeText = $bridgeTexts[($bridgeCount - 1) % count($bridgeTexts)];
         $item = [
