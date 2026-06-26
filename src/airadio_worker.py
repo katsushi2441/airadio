@@ -366,7 +366,7 @@ def bridge_segments(theme: str) -> list[dict[str, Any]]:
     return items
 
 
-def build_segments(theme: str, profile: dict[str, Any], research: dict[str, Any]) -> list[dict[str, Any]]:
+def build_segments(theme: str, profile: dict[str, Any], research: dict[str, Any], instruction: str = '', ignore_profile_script: bool = False) -> list[dict[str, Any]]:
     memory = load_memory()
     guidance = theme_guidance(theme)
     profile_text = json.dumps(enrich_profile(profile), ensure_ascii=False)[:1800]
@@ -378,9 +378,11 @@ def build_segments(theme: str, profile: dict[str, Any], research: dict[str, Any]
     prompt = f'''
 あなたは「Kurage AI VTuber Radio」のメイン構成作家です。
 KurageがDJで、編集者は聞き手であり番組を整える人です。ログインした他ユーザーは同じ番組を聞くリスナーです。
-編集者のXプロフィールに合うテーマから入り、AI、Bittensor、分散AI、Web3、バイブコーディング、Claude Code/Codex、AI Agent、収益化の文脈を自然に接続してください。
+自由入力指示がある場合はその指示を最優先します。指示がない場合だけ、編集者のXプロフィールに合うテーマから入り、AI、Bittensor、分散AI、Web3、バイブコーディング、Claude Code/Codex、AI Agent、収益化の文脈を自然に接続してください。
 
 テーマ: {theme}
+編集者の自由入力指示: {instruction or 'なし'}
+プロフィール台本を無視するか: {'はい' if ignore_profile_script else 'いいえ'}
 テーマ解釈: {guidance}
 聞き手プロフィール: {profile_text}
 情報収集メモ: {research_text}
@@ -390,6 +392,8 @@ KurageがDJで、編集者は聞き手であり番組を整える人です。ロ
 - 日本語。
 - Kurageが編集者とリスナーへ話しかける口調。
 - 編集者の学びを、他のリスナーにも役立つ解説へ変換する。
+- 自由入力指示がある場合は、その文章の意図を最優先する。プロフィール起点の定番台本、Bittensor、Web3、収益化の話に勝手に戻らない。
+- 自由入力指示はフォーマットなしの自然文として扱い、「何について」「どのレベルで」「どう話してほしいか」を推測して台本化する。
 - 1本あたり60〜120秒程度で読める長さ。
 - 同じ言い回し、同じ結論、同じブリッジトークは禁止。
 - 抽象論だけで終わらせない。具体的なツール、実装、収益化、発信、検証、失敗回避を入れる。
@@ -467,8 +471,10 @@ def main() -> None:
     parser.add_argument('--payload', required=True)
     args = parser.parse_args()
     payload = read_json(Path(args.payload), {})
-    theme = normalize_theme_request(str(payload.get('theme') or 'AI思考とバイブコーディング'))
+    instruction = str(payload.get('instruction') or '').strip()
+    theme = normalize_theme_request(str(payload.get('theme') or instruction or 'AI思考とバイブコーディング'))
     profile = payload.get('profile') if isinstance(payload.get('profile'), dict) else {}
+    ignore_profile_script = bool(payload.get('ignore_profile_script')) or bool(instruction)
 
     if not acquire_lock():
         return
@@ -478,7 +484,7 @@ def main() -> None:
         research = run_x_search(theme)
         log_event('research_finished', theme=theme, ok=research.get('ok'), skipped=research.get('skipped', False))
         update_state(research_status='scripting', last_research=research)
-        segments = build_segments(theme, profile, research)
+        segments = build_segments(theme, profile, research, instruction=instruction, ignore_profile_script=ignore_profile_script)
         append_queue(segments)
         start_tts_prefetch(segments, 'worker')
         log_event('segments_appended', theme=theme, count=len(segments), sources=sorted({str(s.get('source')) for s in segments}))

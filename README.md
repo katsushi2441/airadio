@@ -109,6 +109,11 @@ keeps talking while the new script is built.
 
 The UI supports 1 to 6 hour sessions in 1 hour increments.
 
+When the start text area has a free-form instruction, AIRadio treats that text
+as the primary program direction and does not enqueue the profile-based seed
+script. The profile is still available as background context, but the generated
+program must follow the instruction text first.
+
 ## Voice / TTS
 
 AIRadio uses the same Kurage-standard TTS path as the broader Kurage VTuber

@@ -372,9 +372,47 @@ function airadio_seed_profile_program($theme, $profile) {
     return $items;
 }
 
-function airadio_start_worker($theme, $profile, $reason = 'manual') {
+function airadio_seed_instruction_program($theme, $instruction, $guidance) {
+    $now = time();
+    $instruction = trim((string)$instruction);
+    $guidance = trim((string)$guidance);
+    $texts = [
+        [
+            'title' => $theme . 'を始める',
+            'text' => 'ここからは、編集者の自由入力の指示を優先します。入力された指示は「' . $instruction . '」です。Kurageはこれを、' . $theme . 'として受け取りました。' . $guidance . 'プロフィール由来のいつもの話題には戻らず、この指示に沿って番組を組み立てます。',
+            'source' => 'instruction-seed-opening',
+        ],
+        [
+            'title' => '今日の聞きどころ',
+            'text' => 'このテーマで最初に大切なのは、何を知れば一歩進めるのかをはっきりさせることです。Kurageは、言葉の意味、実際の使い方、つまずきやすい点、今日試せる小さな行動の順に整理します。リスナーは全部覚えなくて大丈夫です。自分の作業に使えそうな一文だけ拾ってください。',
+            'source' => 'instruction-seed-map',
+        ],
+        [
+            'title' => '最初の実践へ',
+            'text' => 'このあと裏側では、指定されたテーマに合わせて情報収集と台本生成を進めます。表のラジオでは、待ち時間を無音にせず、今のテーマに沿った導入を続けます。重要なのは、一般論ではなく、編集者が入力した指示から外れないことです。',
+            'source' => 'instruction-seed-practice',
+        ],
+    ];
+    $items = [];
+    foreach ($texts as $i => $row) {
+        $row['id'] = 'instruction-seed-' . $now . '-' . $i;
+        $row['theme'] = $theme;
+        $row['requested_theme'] = $instruction;
+        $row['created_at'] = date('c', $now);
+        $items[] = $row;
+    }
+    return $items;
+}
+
+function airadio_start_worker($theme, $profile, $reason = 'manual', $extra = []) {
     $payload = AIRADIO_STORAGE_DIR . '/worker_payload.json';
-    airadio_write_json($payload, ['theme' => $theme, 'profile' => $profile, 'reason' => $reason, 'created_at' => date('c')]);
+    $data = array_merge([
+        'theme' => $theme,
+        'profile' => $profile,
+        'reason' => $reason,
+        'created_at' => date('c'),
+    ], is_array($extra) ? $extra : []);
+    airadio_write_json($payload, $data);
     $python = getenv('AIRADIO_PYTHON') ?: '/usr/bin/python3';
     $cmd = sprintf(
         'cd %s && nohup %s %s --payload %s >> %s 2>&1 & echo $!',

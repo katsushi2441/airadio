@@ -102,6 +102,7 @@ if ($action === 'comment') {
 if ($action === 'start') {
     require_admin($auth);
     $rawTheme = trim((string)(isset($input['theme']) ? $input['theme'] : ''));
+    $hasInstruction = $rawTheme !== '';
     $theme = airadio_normalize_theme_request($rawTheme);
     $profile = airadio_profile_from_session();
     if ($theme === '') { $theme = airadio_default_theme_from_profile($profile); }
@@ -124,16 +125,28 @@ if ($action === 'start') {
     $items = [[
         'id' => 'opening-' . time(),
         'theme' => $theme,
-        'title' => 'オープニング',
-        'text' => 'こんばんは。Kurage AI VTuber Radioです。KurageがDJとして話し、編集者が学びたいテーマを他のリスナーにも届く形に整えていきます。今回は、' . $theme . 'として受け取りました。' . $themeGuidance . '短い一般論を繰り返さず、少しずつ深く見ていきます。',
+        'requested_theme' => $rawTheme,
+        'title' => $hasInstruction ? $theme . 'を始めます' : 'オープニング',
+        'text' => $hasInstruction
+            ? 'こんばんは。Kurage AI VTuber Radioです。テキストエリアの指示を優先します。編集者の指示は「' . $rawTheme . '」です。Kurageはこれを、' . $theme . 'として理解しました。プロフィール由来の通常台本はいったん使わず、この指示に沿って話します。'
+            : 'こんばんは。Kurage AI VTuber Radioです。KurageがDJとして話し、編集者が学びたいテーマを他のリスナーにも届く形に整えていきます。今回は、' . $theme . 'として受け取りました。' . $themeGuidance . '短い一般論を繰り返さず、少しずつ深く見ていきます。',
         'source' => 'opening',
         'created_at' => date('c'),
     ]];
-    $items = array_merge($items, airadio_seed_profile_program($theme, $profile));
+    $items = array_merge(
+        $items,
+        $hasInstruction
+            ? airadio_seed_instruction_program($theme, $rawTheme, $themeGuidance)
+            : airadio_seed_profile_program($theme, $profile)
+    );
     $queue = ['items' => $items, 'updated_at' => date('c')];
     airadio_write_json(AIRADIO_QUEUE_FILE, $queue);
     $ttsPid = airadio_start_tts_prefetch($items, 'start');
-    $pid = airadio_start_worker($theme, $profile, 'start');
+    $pid = airadio_start_worker($theme, $profile, 'start', [
+        'instruction' => $rawTheme,
+        'theme_guidance' => $themeGuidance,
+        'ignore_profile_script' => $hasInstruction,
+    ]);
     ok(['state' => $state, 'worker_pid' => $pid, 'tts_prefetch_pid' => $ttsPid, 'prefetch_items' => array_slice($items, 0, AIRADIO_TTS_PREFETCH_LIMIT)]);
 }
 
@@ -164,7 +177,11 @@ if ($action === 'interrupt') {
     airadio_write_json(AIRADIO_QUEUE_FILE, $queue);
     $ttsPid = airadio_start_tts_prefetch([$interruptItem], 'interrupt');
     $state = airadio_update_state(['theme' => $theme, 'requested_theme' => $rawTheme, 'theme_guidance' => $themeGuidance, 'research_status' => 'queued', 'loop_state' => 'theme_interrupt']);
-    $pid = airadio_start_worker($theme, airadio_profile_from_session(), 'interrupt');
+    $pid = airadio_start_worker($theme, airadio_profile_from_session(), 'interrupt', [
+        'instruction' => $rawTheme,
+        'theme_guidance' => $themeGuidance,
+        'ignore_profile_script' => true,
+    ]);
     ok(['state' => $state, 'worker_pid' => $pid, 'tts_prefetch_pid' => $ttsPid, 'queue' => $queue]);
 }
 
