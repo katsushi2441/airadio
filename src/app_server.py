@@ -37,6 +37,7 @@ TTS_PREFETCH_LIMIT = int(os.environ.get('AIRADIO_TTS_PREFETCH_LIMIT', '4'))
 KVTUBER_CONTROL_BASE = os.environ.get('AIRADIO_KVTUBER_CONTROL_BASE', 'http://127.0.0.1:18308').rstrip('/')
 KVTUBER_ADMIN_TOKEN = os.environ.get('AIRADIO_KVTUBER_ADMIN_TOKEN', os.environ.get('KURAGE_ADMIN_TOKEN', ''))
 KVTUBER_YOUTUBE_CONFIG = Path(os.environ.get('AIRADIO_KVTUBER_YOUTUBE_CONFIG', '/home/kojima/work/kvtuber/storage/youtube-live.json'))
+KVTUBER_LEGACY_YOUTUBE_CONFIG = Path(os.environ.get('AIRADIO_KVTUBER_LEGACY_YOUTUBE_CONFIG', '/home/kojima/work/kvtuber/aituber-onair/storage/youtube-live.json'))
 
 app = FastAPI(title='Kurage AI VTuber Radio API')
 app.add_middleware(CORSMiddleware, allow_origins=['*'], allow_methods=['*'], allow_headers=['*'])
@@ -327,11 +328,21 @@ def audio_for_text(text: str) -> bytes:
     return res.content
 
 
+def default_stream_key() -> str:
+    env_key = os.environ.get('YOUTUBE_STREAM_KEY', '').strip()
+    if env_key:
+        return env_key
+    for path in [KVTUBER_YOUTUBE_CONFIG, KVTUBER_LEGACY_YOUTUBE_CONFIG]:
+        config = read_json(path, {})
+        if isinstance(config, dict):
+            key = str(config.get('streamKey') or '').strip()
+            if key:
+                return key
+    return ''
+
+
 def has_default_stream_key() -> bool:
-    if os.environ.get('YOUTUBE_STREAM_KEY', '').strip():
-        return True
-    config = read_json(KVTUBER_YOUTUBE_CONFIG, {})
-    return bool(isinstance(config, dict) and str(config.get('streamKey') or '').strip())
+    return bool(default_stream_key())
 
 
 @app.get('/health')
@@ -449,10 +460,13 @@ async def api_action(action: str, request: Request, x_airadio_auth: str | None =
             r = requests.post(f'{KVTUBER_CONTROL_BASE}/control/youtube-live/stop', headers=headers, timeout=30)
             return {'ok': True, 'mode': 'kvtuber-control-api', 'result': safe_json_response(r)}
         stream_key = str(body.get('stream_key') or '').strip()
+        if not stream_key:
+            stream_key = default_stream_key()
+        if not stream_key:
+            raise HTTPException(400, 'stream_key_required')
         viewer_url = str(body.get('viewer_url') or PUBLIC_BASE_URL).strip()
         config = {'viewerUrl': viewer_url}
-        if stream_key:
-            config['streamKey'] = stream_key
+        config['streamKey'] = stream_key
         r1 = requests.post(f'{KVTUBER_CONTROL_BASE}/control/youtube-live', json=config, headers=headers, timeout=30)
         r2 = requests.post(f'{KVTUBER_CONTROL_BASE}/control/youtube-live/start', headers=headers, timeout=30)
         return {'ok': True, 'mode': 'kvtuber-control-api', 'viewer_url': viewer_url, 'config': safe_json_response(r1), 'result': safe_json_response(r2)}
