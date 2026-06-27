@@ -431,8 +431,12 @@ async def api_action(action: str, request: Request, x_airadio_auth: str | None =
         profile = fetch_x_profile(ALLOWED_USER)
         pid = start_worker(theme, profile, 'interrupt', {'instruction': theme, 'theme_guidance': guidance, 'ignore_profile_script': True, 'duration_hours': int(state().get('duration_hours') or 1)})
         return {'ok': True, 'state': new_state, 'worker_pid': pid, 'tts_prefetch_pid': '', 'queue': q}
-    if action == 'next':
-        require_admin(auth)
+    if action in {'next', 'broadcast_next'}:
+        if action == 'broadcast_next':
+            if not (auth.get('broadcast') or auth.get('is_admin')):
+                raise HTTPException(403, 'broadcast_required')
+        else:
+            require_admin(auth)
         s = state()
         if s.get('status') != 'on_air':
             raise HTTPException(status_code=409, detail={'error': 'radio_not_on_air', 'state': s, 'current': current()})

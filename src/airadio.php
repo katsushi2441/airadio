@@ -38,6 +38,8 @@ $isBroadcast = !empty($auth['broadcast']);
       <div class="controls"><textarea id="theme" placeholder="割込みテーマURL&#10;1行1URLで入力。GitHub、ブログ、ニュースURLを複数指定できます。&#10;空白のまま開始すると、編集者のXプロフィールから番組を作ります。"></textarea><select id="hours"><option value="1">1時間</option><option value="2">2時間</option><option value="3">3時間</option><option value="4">4時間</option><option value="5">5時間</option><option value="6">6時間</option></select></div>
       <div class="buttons"><button class="btn live" id="startBtn">ラジオ開始</button><button class="btn secondary" id="interruptBtn">URL割り込み</button><button class="btn secondary" id="stopBtn">停止</button></div>
       <div class="liveControls"><input id="streamKey" type="password" placeholder="YouTube Live ストリームキー（空欄なら保存済みキー）"><button class="btn secondary" id="youtubeStartBtn">YouTube配信</button><button class="btn secondary" id="youtubeStopBtn">配信停止</button></div>
+      <?php elseif ($isBroadcast): ?>
+      <div class="sleepNote">この画面はYouTube配信用viewerです。ボタン操作なしで、配信中の台本を自動取得して読み上げます。</div>
       <?php else: ?>
       <div class="buttons"><button class="btn live" id="listenBtn">視聴開始</button></div>
       <div class="sleepNote">この画面は視聴専用です。編集者が配信開始している間、同じ現在台本を取得して読み上げます。配信していないときは待機中になります。</div>
@@ -104,7 +106,7 @@ async function fetchAudioUrl(text, purpose='play'){
   if (purpose === 'prefetch' && audioPrefetching.has(key)) return null;
   if (purpose === 'prefetch') audioPrefetching.add(key);
   const promise = (async()=>{
-    const res = await fetch('api.php?action=tts', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text:key})});
+    const res = await fetch(`api.php?action=tts${IS_BROADCAST ? '&broadcast=1' : ''}`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text:key})});
     if (!res.ok) throw new Error('TTS HTTP '+res.status);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
@@ -185,6 +187,29 @@ async function listenerLoop(){
   }
   setMouth(false);
 }
+async function broadcastLoop(){
+  while(running){
+    let d;
+    try {
+      d = await api('broadcast_next');
+    } catch(e) {
+      d = null;
+    }
+    if (!d?.ok || !d.item) {
+      nowTalking.textContent='待機中';
+      currentText.textContent='編集者がラジオ開始すると、自動で台本を取得してYouTubeへ読み上げます。';
+      await new Promise(r=>setTimeout(r, 3000));
+      continue;
+    }
+    const item = d.item || {};
+    lastCurrentId = item.id || lastCurrentId;
+    log(`broadcast: ${item.title||''}`);
+    prefetchItems(d.prefetch_items || []);
+    await speakText(item.text || bridgeTexts[0], item.title || 'Kurage Radio');
+    await new Promise(r=>setTimeout(r, 200));
+  }
+  setMouth(false);
+}
 function renderComments(items){
   if (!commentsBox) return;
   commentsBox.innerHTML = '';
@@ -211,11 +236,12 @@ if (IS_ADMIN) {
   document.getElementById('youtubeStartBtn').onclick=async()=>{ const stream_key=document.getElementById('streamKey').value.trim(); if(!stream_key && !hasDefaultStreamKey){ log('YouTube Live ストリームキーを入力してください'); return; } const d=await api('youtube_start',{stream_key,viewer_url:broadcastUrl()}); log(d.ok?'YouTube配信を開始しました':'YouTube配信開始に失敗しました: '+errorText(d)); };
   document.getElementById('youtubeStopBtn').onclick=async()=>{ const d=await api('youtube_stop',{}); log(d.ok?'YouTube配信を停止しました':'YouTube配信停止に失敗しました: '+errorText(d)); };
 } else {
-  document.getElementById('listenBtn').onclick=async()=>{ running=true; log('listening started'); listenerLoop(); };
   if (IS_BROADCAST) {
     running=true;
     log('broadcast listening started');
-    listenerLoop();
+    broadcastLoop();
+  } else {
+    document.getElementById('listenBtn').onclick=async()=>{ running=true; log('listening started'); listenerLoop(); };
   }
 }
 document.getElementById('commentBtn').onclick=async()=>{ const el=document.getElementById('commentText'); const text=el.value.trim(); if(!text){ return; } const d=await api('comment',{text}); if(d.ok){ el.value=''; renderComments(d.comments?.items||[]); log('comment sent'); }else{ log('コメント送信に失敗しました'); } };
