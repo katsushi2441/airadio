@@ -42,6 +42,7 @@ KVTUBER_CONTROL_BASE = os.environ.get('AIRADIO_KVTUBER_CONTROL_BASE', 'http://12
 KVTUBER_ADMIN_TOKEN = os.environ.get('AIRADIO_KVTUBER_ADMIN_TOKEN', os.environ.get('KURAGE_ADMIN_TOKEN', ''))
 KVTUBER_YOUTUBE_CONFIG = Path(os.environ.get('AIRADIO_KVTUBER_YOUTUBE_CONFIG', '/home/kojima/work/kvtuber/storage/youtube-live.json'))
 KVTUBER_LEGACY_YOUTUBE_CONFIG = Path(os.environ.get('AIRADIO_KVTUBER_LEGACY_YOUTUBE_CONFIG', '/home/kojima/work/kvtuber/aituber-onair/storage/youtube-live.json'))
+DURATION_GUARD = SRC / 'airadio_duration_guard.py'
 
 app = FastAPI(title='Kurage AI VTuber Radio API')
 app.add_middleware(CORSMiddleware, allow_origins=['*'], allow_methods=['*'], allow_headers=['*'])
@@ -332,6 +333,33 @@ def start_worker(theme: str, profile: dict[str, Any], reason: str, extra: dict[s
     return proc.pid
 
 
+def start_duration_guard(s: dict[str, Any], reason: str = 'duration_elapsed') -> int:
+    started_at = str(s.get('started_at') or '').strip()
+    ends_at = str(s.get('ends_at') or '').strip()
+    if not started_at or not ends_at:
+        return 0
+    log = LOG.open('ab')
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            str(DURATION_GUARD),
+            '--started-at',
+            started_at,
+            '--ends-at',
+            ends_at,
+            '--reason',
+            reason,
+        ],
+        cwd=str(ROOT),
+        stdout=log,
+        stderr=log,
+        start_new_session=True,
+        env=os.environ.copy(),
+    )
+    append_log('duration_guard_started', {'pid': proc.pid, 'started_at': started_at, 'ends_at': ends_at, 'reason': reason})
+    return proc.pid
+
+
 def prepare_program_start(body: dict[str, Any], auth: dict[str, Any], reason: str = 'start') -> dict[str, Any]:
     raw_theme = str(body.get('theme') or '').strip()
     urls = extract_urls(raw_theme)
@@ -600,7 +628,8 @@ async def api_action(action: str, request: Request, x_airadio_auth: str | None =
         if r2.status_code >= 400 or (isinstance(start_result, dict) and start_result.get('ok') is False):
             raise HTTPException(502, {'error': 'kvtuber_youtube_start_failed', 'result': start_result})
         started = prepare_program_start(body, auth, 'youtube_start')
-        return {'ok': True, 'mode': 'kvtuber-control-api', 'viewer_url': viewer_url, 'program': started, 'config': config_result, 'result': start_result}
+        guard_pid = start_duration_guard(started['state'], 'duration_elapsed')
+        return {'ok': True, 'mode': 'kvtuber-control-api', 'viewer_url': viewer_url, 'program': started, 'duration_guard_pid': guard_pid, 'config': config_result, 'result': start_result}
     raise HTTPException(404, 'unknown_action')
 
 
