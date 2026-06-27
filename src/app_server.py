@@ -458,7 +458,10 @@ async def api_action(action: str, request: Request, x_airadio_auth: str | None =
         headers = {'X-Admin-Token': KVTUBER_ADMIN_TOKEN}
         if action == 'youtube_stop':
             r = requests.post(f'{KVTUBER_CONTROL_BASE}/control/youtube-live/stop', headers=headers, timeout=30)
-            return {'ok': True, 'mode': 'kvtuber-control-api', 'result': safe_json_response(r)}
+            result = safe_json_response(r)
+            if r.status_code >= 400 or (isinstance(result, dict) and result.get('ok') is False):
+                raise HTTPException(502, {'error': 'kvtuber_youtube_stop_failed', 'result': result})
+            return {'ok': True, 'mode': 'kvtuber-control-api', 'result': result}
         stream_key = str(body.get('stream_key') or '').strip()
         if not stream_key:
             stream_key = default_stream_key()
@@ -468,8 +471,14 @@ async def api_action(action: str, request: Request, x_airadio_auth: str | None =
         config = {'viewerUrl': viewer_url}
         config['streamKey'] = stream_key
         r1 = requests.post(f'{KVTUBER_CONTROL_BASE}/control/youtube-live', json=config, headers=headers, timeout=30)
+        config_result = safe_json_response(r1)
+        if r1.status_code >= 400 or (isinstance(config_result, dict) and config_result.get('ok') is False):
+            raise HTTPException(502, {'error': 'kvtuber_youtube_config_failed', 'result': config_result})
         r2 = requests.post(f'{KVTUBER_CONTROL_BASE}/control/youtube-live/start', headers=headers, timeout=30)
-        return {'ok': True, 'mode': 'kvtuber-control-api', 'viewer_url': viewer_url, 'config': safe_json_response(r1), 'result': safe_json_response(r2)}
+        start_result = safe_json_response(r2)
+        if r2.status_code >= 400 or (isinstance(start_result, dict) and start_result.get('ok') is False):
+            raise HTTPException(502, {'error': 'kvtuber_youtube_start_failed', 'result': start_result})
+        return {'ok': True, 'mode': 'kvtuber-control-api', 'viewer_url': viewer_url, 'config': config_result, 'result': start_result}
     raise HTTPException(404, 'unknown_action')
 
 

@@ -67,6 +67,14 @@ const audioPrefetching = new Set();
 const audioPromises = new Map();
 const bridgeTexts = ['少しだけ、静かな間を置きます。考えは急がなくて大丈夫です。','裏側で情報を集めています。こちらでは、今のテーマをゆっくりほどいていきます。'];
 function extractUrls(text){ return [...new Set((text || '').match(/https?:\/\/[^\s「」『』"'`<>]+/g) || [])].map(u=>u.replace(/[。、.!！?)]）]+$/,'')); }
+function errorText(d){
+  const detail = d?.detail;
+  if (typeof detail === 'string') return detail;
+  if (detail?.error) return detail.error;
+  if (detail?.result?.error) return detail.result.error;
+  if (d?.error) return d.error;
+  return 'unknown error';
+}
 function log(msg){ const el=document.createElement('div'); el.className='segment'; el.textContent=new Date().toLocaleTimeString()+'  '+msg; loopLog.prepend(el); }
 function setMouth(on){ avatar.src = on ? 'assets/kurage_radio_talk.png' : 'assets/kurage_radio_idle.png'; avatar.classList.toggle('talking', on); meter.style.width = on ? '78%' : '18%'; }
 function stopCurrentAudio(){
@@ -191,8 +199,8 @@ if (IS_ADMIN) {
   document.getElementById('startBtn').onclick=async()=>{ const theme=document.getElementById('theme').value.trim(); const hours=Number(document.getElementById('hours').value||1); nowTalking.textContent='初回音声を準備中'; currentText.textContent='最初の台本と音声を準備しています。ここだけ少し時間がかかります。始まった後は、次の音声をバックグラウンドで先読みして、できるだけ間が空かないようにします。'; const d=await api('start',{theme,duration_hours:hours}); prefetchItems(d.prefetch_items||[]); endsAt = Date.now()+hours*3600*1000; running=true; log('radio started'); radioLoop(); };
   document.getElementById('interruptBtn').onclick=async()=>{ const theme=document.getElementById('theme').value.trim(); const urls=extractUrls(theme); if(!urls.length){ log('割込みテーマURLを1行1URLで入力してください'); return; } await api('interrupt',{theme:urls.join('\n')}); log('URL interrupt: '+urls.length+'件'); };
   document.getElementById('stopBtn').onclick=async()=>{ running=false; stopCurrentAudio(); await api('stop'); log('stopped'); nowTalking.textContent='停止中'; setMouth(false); };
-  document.getElementById('youtubeStartBtn').onclick=async()=>{ const stream_key=document.getElementById('streamKey').value.trim(); if(!stream_key && !hasDefaultStreamKey){ log('YouTube Live ストリームキーを入力してください'); return; } const d=await api('youtube_start',{stream_key,viewer_url:location.href.split('#')[0]}); log(d.ok?'YouTube配信を開始しました':'YouTube配信開始に失敗しました'); };
-  document.getElementById('youtubeStopBtn').onclick=async()=>{ const d=await api('youtube_stop',{}); log(d.ok?'YouTube配信を停止しました':'YouTube配信停止に失敗しました'); };
+  document.getElementById('youtubeStartBtn').onclick=async()=>{ const stream_key=document.getElementById('streamKey').value.trim(); if(!stream_key && !hasDefaultStreamKey){ log('YouTube Live ストリームキーを入力してください'); return; } const d=await api('youtube_start',{stream_key,viewer_url:location.href.split('#')[0]}); log(d.ok?'YouTube配信を開始しました':'YouTube配信開始に失敗しました: '+errorText(d)); };
+  document.getElementById('youtubeStopBtn').onclick=async()=>{ const d=await api('youtube_stop',{}); log(d.ok?'YouTube配信を停止しました':'YouTube配信停止に失敗しました: '+errorText(d)); };
 } else {
   document.getElementById('listenBtn').onclick=async()=>{ running=true; log('listening started'); listenerLoop(); };
 }
