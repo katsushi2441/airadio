@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -64,6 +65,24 @@ def write_json(path: Path, data: Any) -> None:
 def append_log(message: str, data: dict[str, Any] | None = None) -> None:
     STORAGE.mkdir(parents=True, exist_ok=True)
     LOG.open('a', encoding='utf-8').write(json.dumps({'time': now_iso(), 'message': message, 'data': data or {}}, ensure_ascii=False) + '\n')
+
+
+def parse_state_time(value: Any) -> float:
+    text = str(value or '').strip()
+    if not text:
+        return 0.0
+    for fmt in ('%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%dT%H:%M:%S'):
+        try:
+            return datetime.strptime(text, fmt).timestamp()
+        except Exception:
+            pass
+    return 0.0
+
+
+def program_expired(s: dict[str, Any] | None = None) -> bool:
+    s = s or state()
+    end_ts = parse_state_time(s.get('ends_at'))
+    return bool(end_ts and time.time() >= end_ts)
 
 
 def state() -> dict[str, Any]:
@@ -350,6 +369,29 @@ def prepare_program_start(body: dict[str, Any], auth: dict[str, Any], reason: st
     return {'state': new_state, 'worker_pid': pid, 'prefetch_items': items[:TTS_PREFETCH_LIMIT]}
 
 
+def stop_youtube_live(reason: str = 'stop') -> dict[str, Any]:
+    if not KVTUBER_ADMIN_TOKEN:
+        return {'ok': False, 'skipped': True, 'reason': 'kvtuber_admin_token_not_configured'}
+    headers = {'X-Admin-Token': KVTUBER_ADMIN_TOKEN}
+    try:
+        r = requests.post(f'{KVTUBER_CONTROL_BASE}/control/youtube-live/stop', headers=headers, timeout=30)
+        result = safe_json_response(r)
+        ok = r.status_code < 400 and not (isinstance(result, dict) and result.get('ok') is False)
+        append_log('youtube_stop_requested', {'reason': reason, 'ok': ok})
+        return {'ok': ok, 'status_code': r.status_code, 'result': result}
+    except Exception as exc:
+        append_log('youtube_stop_failed', {'reason': reason, 'error': str(exc)})
+        return {'ok': False, 'error': str(exc)}
+
+
+def stop_program(reason: str = 'stop', stop_youtube: bool = True) -> dict[str, Any]:
+    write_current(None)
+    write_json(QUEUE, {'items': [], 'updated_at': now_iso()})
+    new_state = update_state({'status': 'idle', 'loop_state': 'stopped', 'now_talking': '', 'research_status': 'idle', 'stopped_reason': reason})
+    youtube_result = stop_youtube_live(reason) if stop_youtube else {'ok': True, 'skipped': True}
+    return {'state': new_state, 'youtube_stop': youtube_result}
+
+
 def audio_for_text(text: str) -> bytes:
     text = (text or '').strip()
     if not text:
@@ -434,9 +476,8 @@ async def api_action(action: str, request: Request, x_airadio_auth: str | None =
         return {'ok': True, 'state': started['state'], 'worker_pid': started['worker_pid'], 'tts_prefetch_pid': '', 'prefetch_items': started['prefetch_items']}
     if action == 'stop':
         require_admin(auth)
-        write_current(None)
-        write_json(QUEUE, {'items': [], 'updated_at': now_iso()})
-        return {'ok': True, 'state': update_state({'status': 'idle', 'loop_state': 'stopped', 'now_talking': '', 'research_status': 'idle'})}
+        stopped = stop_program('manual_stop', stop_youtube=True)
+        return {'ok': True, 'state': stopped['state'], 'youtube_stop': stopped['youtube_stop']}
     if action == 'interrupt':
         require_admin(auth)
         raw_theme = str(body.get('theme') or '').strip()
@@ -463,6 +504,9 @@ async def api_action(action: str, request: Request, x_airadio_auth: str | None =
         s = state()
         if s.get('status') != 'on_air':
             raise HTTPException(status_code=409, detail={'error': 'radio_not_on_air', 'state': s, 'current': current()})
+        if program_expired(s):
+            stopped = stop_program('duration_elapsed', stop_youtube=True)
+            return {'ok': False, 'ended': True, 'reason': 'duration_elapsed', 'state': stopped['state'], 'youtube_stop': stopped['youtube_stop']}
         q = queue()
         items = q.get('items') or []
         item = items.pop(0) if items else None
@@ -494,11 +538,11 @@ async def api_action(action: str, request: Request, x_airadio_auth: str | None =
             raise HTTPException(500, 'kvtuber_admin_token_not_configured')
         headers = {'X-Admin-Token': KVTUBER_ADMIN_TOKEN}
         if action == 'youtube_stop':
-            r = requests.post(f'{KVTUBER_CONTROL_BASE}/control/youtube-live/stop', headers=headers, timeout=30)
-            result = safe_json_response(r)
-            if r.status_code >= 400 or (isinstance(result, dict) and result.get('ok') is False):
+            stopped = stop_program('youtube_stop', stop_youtube=True)
+            result = stopped['youtube_stop']
+            if isinstance(result, dict) and result.get('ok') is False and not result.get('skipped'):
                 raise HTTPException(502, {'error': 'kvtuber_youtube_stop_failed', 'result': result})
-            return {'ok': True, 'mode': 'kvtuber-control-api', 'result': result}
+            return {'ok': True, 'mode': 'kvtuber-control-api', 'result': result, 'state': stopped['state']}
         stream_key = str(body.get('stream_key') or '').strip()
         if not stream_key:
             stream_key = default_stream_key()

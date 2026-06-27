@@ -164,6 +164,7 @@ async function radioLoop(){
     await new Promise(r=>setTimeout(r, 200));
   }
   running=false; nowTalking.textContent='終了しました'; setMouth(false);
+  try { await api('stop'); } catch(e) {}
 }
 async function listenerLoop(){
   while(running){
@@ -194,6 +195,13 @@ async function broadcastLoop(){
       d = await api('broadcast_next');
     } catch(e) {
       d = null;
+    }
+    if (d?.ended) {
+      running=false;
+      nowTalking.textContent='配信終了';
+      currentText.textContent='指定した配信時間が終了したため、YouTube配信を停止しました。';
+      log('broadcast ended: '+(d.reason||'duration_elapsed'));
+      break;
     }
     if (!d?.ok || !d.item) {
       nowTalking.textContent='待機中';
