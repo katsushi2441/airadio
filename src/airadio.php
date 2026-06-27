@@ -10,6 +10,7 @@ $loginUrl = isset($auth['login_url']) ? $auth['login_url'] : '?demo_login=xb_bit
 $logoutUrl = isset($auth['logout_url']) ? $auth['logout_url'] : '?demo_logout=1';
 $sessionUser = isset($auth['session_user']) ? $auth['session_user'] : '';
 $isAdmin = !empty($auth['is_admin']);
+$isBroadcast = !empty($auth['broadcast']);
 ?>
 <!doctype html>
 <html lang="ja">
@@ -30,7 +31,7 @@ $isAdmin = !empty($auth['is_admin']);
 <main class="shell">
   <section class="hero">
     <div class="card">
-      <div class="brand"><div><span class="tag">聴きながらよく寝れる</span><h1>Kurage AI<br>VTuber Radio</h1></div><a class="btn secondary" href="<?= htmlspecialchars($logoutUrl) ?>">ログアウト</a></div>
+      <div class="brand"><div><span class="tag">聴きながらよく寝れる</span><h1>Kurage AI<br>VTuber Radio</h1></div><?php if ($isBroadcast): ?><span class="tag">配信用viewer</span><?php else: ?><a class="btn secondary" href="<?= htmlspecialchars($logoutUrl) ?>">ログアウト</a><?php endif; ?></div>
       <p class="lead">KurageがDJ、編集者が選んだURL資料を読み込み、GitHub、ブログ、ニュースの内容を考察するラジオ番組です。長尺では関連ページも補助資料として集め、眠りに入りやすいテンポで深く学べるように話し続けます。</p>
       <div class="rolePill">編集者がURL資料を選び、Kurageがリスナーへ語ります</div>
       <?php if ($isAdmin): ?>
@@ -53,7 +54,8 @@ $isAdmin = !empty($auth['is_admin']);
 </main>
 <script>
 const IS_ADMIN = <?= $isAdmin ? 'true' : 'false' ?>;
-const api = (action, body) => fetch(`api.php?action=${action}`, {method: body ? 'POST':'GET', headers:{'Content-Type':'application/json'}, body: body ? JSON.stringify(body): undefined}).then(r=>r.json());
+const IS_BROADCAST = <?= $isBroadcast ? 'true' : 'false' ?>;
+const api = (action, body) => fetch(`api.php?action=${action}${IS_BROADCAST ? '&broadcast=1' : ''}`, {method: body ? 'POST':'GET', headers:{'Content-Type':'application/json'}, body: body ? JSON.stringify(body): undefined}).then(r=>r.json());
 const avatar = document.getElementById('avatar');
 const nowTalking = document.getElementById('nowTalking');
 const currentText = document.getElementById('currentText');
@@ -74,6 +76,13 @@ function errorText(d){
   if (detail?.result?.error) return detail.result.error;
   if (d?.error) return d.error;
   return 'unknown error';
+}
+function broadcastUrl(){
+  const url = new URL(location.href.split('#')[0]);
+  url.searchParams.set('broadcast','1');
+  url.searchParams.delete('airadio_login');
+  url.searchParams.delete('airadio_logout');
+  return url.toString();
 }
 function log(msg){ const el=document.createElement('div'); el.className='segment'; el.textContent=new Date().toLocaleTimeString()+'  '+msg; loopLog.prepend(el); }
 function setMouth(on){ avatar.src = on ? 'assets/kurage_radio_talk.png' : 'assets/kurage_radio_idle.png'; avatar.classList.toggle('talking', on); meter.style.width = on ? '78%' : '18%'; }
@@ -199,10 +208,15 @@ if (IS_ADMIN) {
   document.getElementById('startBtn').onclick=async()=>{ const theme=document.getElementById('theme').value.trim(); const hours=Number(document.getElementById('hours').value||1); nowTalking.textContent='初回音声を準備中'; currentText.textContent='最初の台本と音声を準備しています。ここだけ少し時間がかかります。始まった後は、次の音声をバックグラウンドで先読みして、できるだけ間が空かないようにします。'; const d=await api('start',{theme,duration_hours:hours}); prefetchItems(d.prefetch_items||[]); endsAt = Date.now()+hours*3600*1000; running=true; log('radio started'); radioLoop(); };
   document.getElementById('interruptBtn').onclick=async()=>{ const theme=document.getElementById('theme').value.trim(); const urls=extractUrls(theme); if(!urls.length){ log('割込みテーマURLを1行1URLで入力してください'); return; } await api('interrupt',{theme:urls.join('\n')}); log('URL interrupt: '+urls.length+'件'); };
   document.getElementById('stopBtn').onclick=async()=>{ running=false; stopCurrentAudio(); await api('stop'); log('stopped'); nowTalking.textContent='停止中'; setMouth(false); };
-  document.getElementById('youtubeStartBtn').onclick=async()=>{ const stream_key=document.getElementById('streamKey').value.trim(); if(!stream_key && !hasDefaultStreamKey){ log('YouTube Live ストリームキーを入力してください'); return; } const d=await api('youtube_start',{stream_key,viewer_url:location.href.split('#')[0]}); log(d.ok?'YouTube配信を開始しました':'YouTube配信開始に失敗しました: '+errorText(d)); };
+  document.getElementById('youtubeStartBtn').onclick=async()=>{ const stream_key=document.getElementById('streamKey').value.trim(); if(!stream_key && !hasDefaultStreamKey){ log('YouTube Live ストリームキーを入力してください'); return; } const d=await api('youtube_start',{stream_key,viewer_url:broadcastUrl()}); log(d.ok?'YouTube配信を開始しました':'YouTube配信開始に失敗しました: '+errorText(d)); };
   document.getElementById('youtubeStopBtn').onclick=async()=>{ const d=await api('youtube_stop',{}); log(d.ok?'YouTube配信を停止しました':'YouTube配信停止に失敗しました: '+errorText(d)); };
 } else {
   document.getElementById('listenBtn').onclick=async()=>{ running=true; log('listening started'); listenerLoop(); };
+  if (IS_BROADCAST) {
+    running=true;
+    log('broadcast listening started');
+    listenerLoop();
+  }
 }
 document.getElementById('commentBtn').onclick=async()=>{ const el=document.getElementById('commentText'); const text=el.value.trim(); if(!text){ return; } const d=await api('comment',{text}); if(d.ok){ el.value=''; renderComments(d.comments?.items||[]); log('comment sent'); }else{ log('コメント送信に失敗しました'); } };
 </script>

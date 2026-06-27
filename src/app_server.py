@@ -345,6 +345,16 @@ def has_default_stream_key() -> bool:
     return bool(default_stream_key())
 
 
+def broadcast_viewer_url(url: str) -> str:
+    url = (url or PUBLIC_BASE_URL).strip() or PUBLIC_BASE_URL
+    if 'airadio.php' not in url:
+        return url
+    separator = '&' if '?' in url else '?'
+    if 'broadcast=1' not in url:
+        url = f'{url}{separator}broadcast=1'
+    return url.replace('airadio_login=1', '').replace('airadio_logout=1', '')
+
+
 @app.get('/health')
 def health() -> dict[str, Any]:
     return {'ok': True, 'service': 'airadio-app', 'time': now_iso(), 'storage': str(STORAGE)}
@@ -467,7 +477,7 @@ async def api_action(action: str, request: Request, x_airadio_auth: str | None =
             stream_key = default_stream_key()
         if not stream_key:
             raise HTTPException(400, 'stream_key_required')
-        viewer_url = str(body.get('viewer_url') or PUBLIC_BASE_URL).strip()
+        viewer_url = broadcast_viewer_url(str(body.get('viewer_url') or PUBLIC_BASE_URL).strip())
         config = {'viewerUrl': viewer_url}
         config['streamKey'] = stream_key
         r1 = requests.post(f'{KVTUBER_CONTROL_BASE}/control/youtube-live', json=config, headers=headers, timeout=30)

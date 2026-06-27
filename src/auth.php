@@ -38,6 +38,17 @@ function airadio_handle_common_login() {
 }
 
 function airadio_auth() {
+    if (isset($_GET['broadcast']) && $_GET['broadcast'] === '1') {
+        return [
+            'logged_in' => false,
+            'session_user' => 'broadcast',
+            'is_admin' => false,
+            'allowed' => true,
+            'broadcast' => true,
+            'login_url' => '?airadio_login=1',
+            'logout_url' => '?airadio_logout=1',
+        ];
+    }
     if (getenv('AIRADIO_ALLOW_DEV_LOGIN') === '1' && !empty($_COOKIE['AIRADIO_DEV_USER'])) {
         $user = preg_replace('/[^A-Za-z0-9_]/', '', $_COOKIE['AIRADIO_DEV_USER']);
         return [
