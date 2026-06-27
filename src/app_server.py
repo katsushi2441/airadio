@@ -9,8 +9,10 @@ import sys
 import time
 import urllib.request
 from datetime import datetime
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
 import requests
 from fastapi import FastAPI, Header, HTTPException, Request, Response
@@ -27,6 +29,7 @@ COMMENTS = STORAGE / 'comments.json'
 WORKER_PAYLOAD = STORAGE / 'worker_payload.json'
 LOG = STORAGE / 'radio_loop.log'
 TTS_CACHE = STORAGE / 'tts'
+PREVIEW_CACHE = STORAGE / 'previews'
 ALLOWED_USER = os.environ.get('AIRADIO_ALLOWED_USER', 'xb_bittensor')
 TTS_ENDPOINT = os.environ.get('AIRADIO_TTS_ENDPOINT', 'http://exbridge.ddns.net:18308/kurage-tts/v1/audio/speech')
 PUBLIC_BASE_URL = os.environ.get('AIRADIO_PUBLIC_BASE_URL', 'https://airadio.exbridge.jp/airadio.php')
@@ -410,6 +413,40 @@ def audio_for_text(text: str) -> bytes:
     return res.content
 
 
+def preview_for_url(url: str) -> bytes:
+    url = unquote((url or '').strip())
+    if not re.match(r'^https?://', url):
+        raise HTTPException(400, 'preview_url_required')
+    PREVIEW_CACHE.mkdir(parents=True, exist_ok=True)
+    h = sha256(url.encode('utf-8')).hexdigest()
+    path = PREVIEW_CACHE / f'{h}.png'
+    if path.exists() and path.stat().st_size > 1000 and time.time() - path.stat().st_mtime < 3600:
+        return path.read_bytes()
+    chrome = os.environ.get('AIRADIO_CHROME_BIN') or '/usr/bin/google-chrome'
+    if not Path(chrome).exists():
+        raise HTTPException(500, 'chrome_not_found')
+    tmp = path.with_suffix('.tmp.png')
+    cmd = [
+        chrome,
+        '--headless=new',
+        '--no-sandbox',
+        '--disable-gpu',
+        '--disable-dev-shm-usage',
+        '--hide-scrollbars',
+        '--window-size=960,540',
+        f'--screenshot={tmp}',
+        url,
+    ]
+    try:
+        subprocess.run(cmd, cwd=str(ROOT), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30, check=False)
+    except subprocess.TimeoutExpired:
+        raise HTTPException(504, 'preview_timeout')
+    if not tmp.exists() or tmp.stat().st_size <= 1000:
+        raise HTTPException(502, 'preview_failed')
+    tmp.replace(path)
+    return path.read_bytes()
+
+
 def default_stream_key() -> str:
     env_key = os.environ.get('YOUTUBE_STREAM_KEY', '').strip()
     if env_key:
@@ -470,6 +507,9 @@ async def api_action(action: str, request: Request, x_airadio_auth: str | None =
     if action == 'tts':
         audio = audio_for_text(str(body.get('text') or ''))
         return Response(content=audio, media_type='audio/mpeg', headers={'Cache-Control': 'private, max-age=86400'})
+    if action == 'preview':
+        image = preview_for_url(str(request.query_params.get('url') or ''))
+        return Response(content=image, media_type='image/png', headers={'Cache-Control': 'private, max-age=3600'})
     if action == 'start':
         require_admin(auth)
         started = prepare_program_start(body, auth, 'start')

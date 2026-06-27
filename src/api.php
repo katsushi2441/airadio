@@ -26,7 +26,10 @@ function airadio_proxy_error($error, $code = 502, $extra = []) {
     exit;
 }
 
-$url = airadio_proxy_base() . '/api/' . rawurlencode($action);
+$query = $_GET;
+unset($query['action']);
+$queryString = http_build_query($query);
+$url = airadio_proxy_base() . '/api/' . rawurlencode($action) . ($queryString !== '' ? '?' . $queryString : '');
 $headers = [
     'Content-Type: application/json',
     'X-Airadio-Auth: ' . json_encode($auth, JSON_UNESCAPED_UNICODE),
@@ -35,7 +38,7 @@ $opts = [
     'http' => [
         'method' => $method === 'POST' ? 'POST' : 'GET',
         'header' => implode("\r\n", $headers) . "\r\n",
-        'timeout' => $action === 'tts' ? 75 : 45,
+        'timeout' => ($action === 'tts' || $action === 'preview') ? 75 : 45,
         'ignore_errors' => true,
     ],
 ];
@@ -56,4 +59,5 @@ if ($raw === false) {
 http_response_code($status);
 header('Content-Type: ' . $contentType);
 if ($action === 'tts') { header('Cache-Control: private, max-age=86400'); }
+if ($action === 'preview') { header('Cache-Control: private, max-age=3600'); }
 echo $raw;
