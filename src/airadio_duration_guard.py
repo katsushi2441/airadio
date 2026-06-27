@@ -20,6 +20,8 @@ LOG = STORAGE / 'radio_loop.log'
 
 KVTUBER_CONTROL_BASE = os.environ.get('AIRADIO_KVTUBER_CONTROL_BASE', 'http://127.0.0.1:18308').rstrip('/')
 KVTUBER_ADMIN_TOKEN = os.environ.get('AIRADIO_KVTUBER_ADMIN_TOKEN', os.environ.get('KURAGE_ADMIN_TOKEN', ''))
+KVTUBER_ROOT = Path(os.environ.get('AIRADIO_KVTUBER_ROOT', '/home/kojima/work/kvtuber'))
+KVTUBER_YOUTUBE_SCRIPT = Path(os.environ.get('AIRADIO_KVTUBER_YOUTUBE_SCRIPT', str(KVTUBER_ROOT / 'scripts/youtube-live-rtmp.mjs')))
 
 
 def now_iso() -> str:
@@ -67,21 +69,45 @@ def update_state(patch: dict[str, Any]) -> dict[str, Any]:
 
 
 def stop_youtube_live(reason: str) -> dict[str, Any]:
-    if not KVTUBER_ADMIN_TOKEN:
-        return {'ok': False, 'skipped': True, 'reason': 'kvtuber_admin_token_not_configured'}
-    try:
-        res = requests.post(
-            f'{KVTUBER_CONTROL_BASE}/control/youtube-live/stop',
-            headers={'X-Admin-Token': KVTUBER_ADMIN_TOKEN},
-            timeout=30,
-        )
+    api_result: dict[str, Any] | None = None
+    if KVTUBER_ADMIN_TOKEN:
         try:
-            result = res.json()
-        except Exception:
-            result = {'status_code': res.status_code, 'text': res.text[-500:]}
-        return {'ok': res.status_code < 400 and not (isinstance(result, dict) and result.get('ok') is False), 'status_code': res.status_code, 'result': result}
-    except Exception as exc:
-        return {'ok': False, 'error': str(exc)}
+            res = requests.post(
+                f'{KVTUBER_CONTROL_BASE}/control/youtube-live/stop',
+                headers={'X-Admin-Token': KVTUBER_ADMIN_TOKEN},
+                timeout=30,
+            )
+            try:
+                result = res.json()
+            except Exception:
+                result = {'status_code': res.status_code, 'text': res.text[-500:]}
+            ok = res.status_code < 400 and not (isinstance(result, dict) and result.get('ok') is False)
+            if ok:
+                return {'ok': True, 'method': 'control-api', 'status_code': res.status_code, 'result': result}
+            api_result = {'ok': False, 'status_code': res.status_code, 'result': result}
+        except Exception as exc:
+            api_result = {'ok': False, 'error': str(exc)}
+    if KVTUBER_YOUTUBE_SCRIPT.exists():
+        import subprocess
+        try:
+            proc = subprocess.run(
+                ['node', str(KVTUBER_YOUTUBE_SCRIPT), 'stop'],
+                cwd=str(KVTUBER_ROOT),
+                capture_output=True,
+                text=True,
+                timeout=45,
+                check=False,
+            )
+            return {
+                'ok': proc.returncode == 0,
+                'method': 'local-kvtuber-script',
+                'api_result': api_result,
+                'stdout': proc.stdout[-1200:],
+                'stderr': proc.stderr[-1200:],
+            }
+        except Exception as exc:
+            return {'ok': False, 'method': 'local-kvtuber-script', 'api_result': api_result, 'error': str(exc)}
+    return {'ok': False, 'method': 'none', 'api_result': api_result, 'reason': 'no_stop_method_available'}
 
 
 def main() -> int:

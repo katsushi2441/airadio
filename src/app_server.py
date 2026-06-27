@@ -40,6 +40,8 @@ TTS_SPEED = float(os.environ.get('AIRADIO_TTS_SPEED', '1.1'))
 TTS_PREFETCH_LIMIT = int(os.environ.get('AIRADIO_TTS_PREFETCH_LIMIT', '4'))
 KVTUBER_CONTROL_BASE = os.environ.get('AIRADIO_KVTUBER_CONTROL_BASE', 'http://127.0.0.1:18308').rstrip('/')
 KVTUBER_ADMIN_TOKEN = os.environ.get('AIRADIO_KVTUBER_ADMIN_TOKEN', os.environ.get('KURAGE_ADMIN_TOKEN', ''))
+KVTUBER_ROOT = Path(os.environ.get('AIRADIO_KVTUBER_ROOT', '/home/kojima/work/kvtuber'))
+KVTUBER_YOUTUBE_SCRIPT = Path(os.environ.get('AIRADIO_KVTUBER_YOUTUBE_SCRIPT', str(KVTUBER_ROOT / 'scripts/youtube-live-rtmp.mjs')))
 KVTUBER_YOUTUBE_CONFIG = Path(os.environ.get('AIRADIO_KVTUBER_YOUTUBE_CONFIG', '/home/kojima/work/kvtuber/storage/youtube-live.json'))
 KVTUBER_LEGACY_YOUTUBE_CONFIG = Path(os.environ.get('AIRADIO_KVTUBER_LEGACY_YOUTUBE_CONFIG', '/home/kojima/work/kvtuber/aituber-onair/storage/youtube-live.json'))
 DURATION_GUARD = SRC / 'airadio_duration_guard.py'
@@ -401,18 +403,43 @@ def prepare_program_start(body: dict[str, Any], auth: dict[str, Any], reason: st
 
 
 def stop_youtube_live(reason: str = 'stop') -> dict[str, Any]:
-    if not KVTUBER_ADMIN_TOKEN:
-        return {'ok': False, 'skipped': True, 'reason': 'kvtuber_admin_token_not_configured'}
-    headers = {'X-Admin-Token': KVTUBER_ADMIN_TOKEN}
-    try:
-        r = requests.post(f'{KVTUBER_CONTROL_BASE}/control/youtube-live/stop', headers=headers, timeout=30)
-        result = safe_json_response(r)
-        ok = r.status_code < 400 and not (isinstance(result, dict) and result.get('ok') is False)
-        append_log('youtube_stop_requested', {'reason': reason, 'ok': ok})
-        return {'ok': ok, 'status_code': r.status_code, 'result': result}
-    except Exception as exc:
-        append_log('youtube_stop_failed', {'reason': reason, 'error': str(exc)})
-        return {'ok': False, 'error': str(exc)}
+    api_result: dict[str, Any] | None = None
+    if KVTUBER_ADMIN_TOKEN:
+        headers = {'X-Admin-Token': KVTUBER_ADMIN_TOKEN}
+        try:
+            r = requests.post(f'{KVTUBER_CONTROL_BASE}/control/youtube-live/stop', headers=headers, timeout=30)
+            result = safe_json_response(r)
+            ok = r.status_code < 400 and not (isinstance(result, dict) and result.get('ok') is False)
+            append_log('youtube_stop_requested', {'reason': reason, 'ok': ok})
+            if ok:
+                return {'ok': True, 'method': 'control-api', 'status_code': r.status_code, 'result': result}
+            api_result = {'ok': False, 'status_code': r.status_code, 'result': result}
+        except Exception as exc:
+            api_result = {'ok': False, 'error': str(exc)}
+            append_log('youtube_stop_failed', {'reason': reason, 'error': str(exc)})
+    if KVTUBER_YOUTUBE_SCRIPT.exists():
+        try:
+            proc = subprocess.run(
+                ['node', str(KVTUBER_YOUTUBE_SCRIPT), 'stop'],
+                cwd=str(KVTUBER_ROOT),
+                capture_output=True,
+                text=True,
+                timeout=45,
+                check=False,
+            )
+            ok = proc.returncode == 0
+            append_log('youtube_stop_local_fallback', {'reason': reason, 'ok': ok, 'returncode': proc.returncode})
+            return {
+                'ok': ok,
+                'method': 'local-kvtuber-script',
+                'api_result': api_result,
+                'stdout': proc.stdout[-1200:],
+                'stderr': proc.stderr[-1200:],
+            }
+        except Exception as exc:
+            append_log('youtube_stop_local_fallback_failed', {'reason': reason, 'error': str(exc)})
+            return {'ok': False, 'method': 'local-kvtuber-script', 'api_result': api_result, 'error': str(exc)}
+    return {'ok': False, 'method': 'none', 'api_result': api_result, 'reason': 'no_stop_method_available'}
 
 
 def stop_program(reason: str = 'stop', stop_youtube: bool = True) -> dict[str, Any]:
