@@ -310,6 +310,46 @@ def start_worker(theme: str, profile: dict[str, Any], reason: str, extra: dict[s
     return proc.pid
 
 
+def prepare_program_start(body: dict[str, Any], auth: dict[str, Any], reason: str = 'start') -> dict[str, Any]:
+    raw_theme = str(body.get('theme') or '').strip()
+    urls = extract_urls(raw_theme)
+    has_instruction = bool(raw_theme)
+    profile = fetch_x_profile(ALLOWED_USER)
+    profile['listener_username'] = ALLOWED_USER
+    profile['logged_in_user'] = str(auth.get('session_user') or '')
+    theme = normalize_url_list(raw_theme) if urls else (normalize_theme_request(raw_theme) if raw_theme else default_theme_from_profile(profile))
+    guidance = theme_guidance(theme)
+    hours = max(1, min(6, int(body.get('duration_hours') or 1)))
+    ts = int(time.time())
+    reset_program_memory()
+    new_state = update_state({
+        'status': 'on_air',
+        'theme': theme,
+        'duration_hours': hours,
+        'started_at': now_iso(),
+        'ends_at': time.strftime('%Y-%m-%dT%H:%M:%S%z', time.localtime(ts + hours * 3600)),
+        'loop_state': 'speaking',
+        'research_status': 'queued',
+        'broadcaster': auth.get('session_user') or ALLOWED_USER,
+        'requested_theme': raw_theme,
+        'theme_guidance': guidance,
+        'program_source': 'url' if urls else ('instruction' if has_instruction else 'profile'),
+    })
+    opening_title = (spoken_theme_title(theme, raw_theme) + 'を始めます') if has_instruction else 'オープニング'
+    opening_text = 'こんばんは。Kurage AI VTuber Radioです。' + (spoken_theme_title(theme, raw_theme) if has_instruction else spoken_theme_title(theme)) + 'について話します。'
+    opening = {'id': f'opening-{ts}', 'theme': theme, 'requested_theme': raw_theme, 'title': opening_title, 'text': opening_text, 'source': 'opening', 'created_at': now_iso()}
+    items = [opening] + (seed_url_program(urls) if urls else (seed_instruction_program(theme, raw_theme) if has_instruction else seed_profile_program(theme)))
+    write_json(QUEUE, {'items': items, 'updated_at': now_iso()})
+    instruction = '\n'.join(urls) if urls else raw_theme
+    pid = start_worker(theme, profile, reason, {
+        'instruction': instruction,
+        'theme_guidance': guidance,
+        'ignore_profile_script': has_instruction,
+        'duration_hours': hours,
+    })
+    return {'state': new_state, 'worker_pid': pid, 'prefetch_items': items[:TTS_PREFETCH_LIMIT]}
+
+
 def audio_for_text(text: str) -> bytes:
     text = (text or '').strip()
     if not text:
@@ -390,25 +430,8 @@ async def api_action(action: str, request: Request, x_airadio_auth: str | None =
         return Response(content=audio, media_type='audio/mpeg', headers={'Cache-Control': 'private, max-age=86400'})
     if action == 'start':
         require_admin(auth)
-        raw_theme = str(body.get('theme') or '').strip()
-        urls = extract_urls(raw_theme)
-        has_instruction = bool(raw_theme)
-        profile = fetch_x_profile(ALLOWED_USER)
-        profile['listener_username'] = ALLOWED_USER
-        profile['logged_in_user'] = str(auth.get('session_user') or '')
-        theme = normalize_url_list(raw_theme) if urls else (normalize_theme_request(raw_theme) if raw_theme else default_theme_from_profile(profile))
-        guidance = theme_guidance(theme)
-        hours = max(1, min(6, int(body.get('duration_hours') or 1)))
-        ts = int(time.time())
-        reset_program_memory()
-        new_state = update_state({'status': 'on_air', 'theme': theme, 'duration_hours': hours, 'started_at': now_iso(), 'ends_at': time.strftime('%Y-%m-%dT%H:%M:%S%z', time.localtime(ts + hours * 3600)), 'loop_state': 'speaking', 'research_status': 'queued', 'broadcaster': auth.get('session_user') or ALLOWED_USER, 'requested_theme': raw_theme, 'theme_guidance': guidance})
-        opening_title = (spoken_theme_title(theme, raw_theme) + 'を始めます') if has_instruction else 'オープニング'
-        opening_text = 'こんばんは。Kurage AI VTuber Radioです。' + (spoken_theme_title(theme, raw_theme) if has_instruction else spoken_theme_title(theme)) + 'について話します。'
-        opening = {'id': f'opening-{ts}', 'theme': theme, 'requested_theme': raw_theme, 'title': opening_title, 'text': opening_text, 'source': 'opening', 'created_at': now_iso()}
-        items = [opening] + (seed_url_program(urls) if urls else (seed_instruction_program(theme, raw_theme) if has_instruction else seed_profile_program(theme)))
-        write_json(QUEUE, {'items': items, 'updated_at': now_iso()})
-        pid = start_worker(theme, profile, 'start', {'instruction': '\n'.join(urls) if urls else raw_theme, 'theme_guidance': guidance, 'ignore_profile_script': has_instruction, 'duration_hours': hours})
-        return {'ok': True, 'state': new_state, 'worker_pid': pid, 'tts_prefetch_pid': '', 'prefetch_items': items[:TTS_PREFETCH_LIMIT]}
+        started = prepare_program_start(body, auth, 'start')
+        return {'ok': True, 'state': started['state'], 'worker_pid': started['worker_pid'], 'tts_prefetch_pid': '', 'prefetch_items': started['prefetch_items']}
     if action == 'stop':
         require_admin(auth)
         write_current(None)
@@ -492,7 +515,8 @@ async def api_action(action: str, request: Request, x_airadio_auth: str | None =
         start_result = safe_json_response(r2)
         if r2.status_code >= 400 or (isinstance(start_result, dict) and start_result.get('ok') is False):
             raise HTTPException(502, {'error': 'kvtuber_youtube_start_failed', 'result': start_result})
-        return {'ok': True, 'mode': 'kvtuber-control-api', 'viewer_url': viewer_url, 'config': config_result, 'result': start_result}
+        started = prepare_program_start(body, auth, 'youtube_start')
+        return {'ok': True, 'mode': 'kvtuber-control-api', 'viewer_url': viewer_url, 'program': started, 'config': config_result, 'result': start_result}
     raise HTTPException(404, 'unknown_action')
 
 
