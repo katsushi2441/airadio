@@ -25,7 +25,7 @@ LOCK = STORAGE / 'worker.lock'
 MEMORY = STORAGE / 'talk_memory.json'
 TTS_PREFETCH_SCRIPT = ROOT / 'src' / 'tts_prefetch.php'
 KAGENTREACH = Path(os.environ.get('AIRADIO_KAGENTREACH_DIR', '/home/kojima/work/kagentreach'))
-OLLAMA_URL = os.environ.get('AIRADIO_OLLAMA_URL', 'http://192.168.0.3:11434/api/generate')
+OLLAMA_URL = os.environ.get('AIRADIO_OLLAMA_URL', 'http://192.168.0.14:11434/api/generate')
 OLLAMA_MODEL = os.environ.get('AIRADIO_OLLAMA_MODEL', 'gemma4:12b-it-qat')
 CLAUDE_MODEL = os.environ.get('AIRADIO_CLAUDE_MODEL', 'haiku')
 CLAUDE_TIMEOUT_SECONDS = int(os.environ.get('AIRADIO_CLAUDE_TIMEOUT', '90'))
@@ -520,7 +520,7 @@ def run_x_search(theme: str) -> dict[str, Any]:
     python_bin = os.environ.get('BROWSER_AGENT_PYTHON', '/home/kojima/work/browser_agent/.venv/bin/python')
     if not Path(python_bin).exists():
         python_bin = sys.executable
-    cmd = [python_bin, str(script), query, '--limit', '6', '--mode', 'top', '--host', os.environ.get('BROWSER_USE_OLLAMA_HOST', 'http://192.168.0.3:11434')]
+    cmd = [python_bin, str(script), query, '--limit', '6', '--mode', 'top', '--host', os.environ.get('BROWSER_USE_OLLAMA_HOST', 'http://192.168.0.14:11434')]
     try:
         proc = subprocess.run(cmd, cwd=str(KAGENTREACH), text=True, capture_output=True, timeout=240, check=False)
         raw = proc.stdout.strip().split('\n')[-1] if proc.stdout.strip() else '{}'
