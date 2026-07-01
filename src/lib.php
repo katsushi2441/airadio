@@ -124,7 +124,7 @@ function airadio_tts_audio_path($text) {
             'method' => 'POST',
             'header' => "Content-Type: application/json\r\n",
             'content' => $payload,
-            'timeout' => 45,
+            'timeout' => 660,
             'ignore_errors' => true,
         ]]);
         $audio = @file_get_contents($endpoint, false, $ctx);

@@ -23,6 +23,7 @@ QUEUE = STORAGE / 'script_queue.json'
 STATE = STORAGE / 'radio_state.json'
 LOCK = STORAGE / 'worker.lock'
 MEMORY = STORAGE / 'talk_memory.json'
+PROGRAM_CACHE = STORAGE / 'program_cache'
 TTS_PREFETCH_SCRIPT = ROOT / 'src' / 'tts_prefetch.php'
 KAGENTREACH = Path(os.environ.get('AIRADIO_KAGENTREACH_DIR', '/home/kojima/work/kagentreach'))
 OLLAMA_URL = os.environ.get('AIRADIO_OLLAMA_URL', 'http://192.168.0.14:11434/api/generate')
@@ -197,6 +198,48 @@ def extract_urls(text: str) -> list[str]:
         if url and url not in cleaned:
             cleaned.append(url)
     return cleaned[:12]
+
+
+def program_cache_key(text: str) -> str:
+    urls = extract_urls(text)
+    if not urls:
+        return ''
+    import hashlib
+    return hashlib.sha256('\n'.join(urls).encode('utf-8')).hexdigest()
+
+
+def write_program_cache(theme: str, instruction: str, research: dict[str, Any], segments: list[dict[str, Any]]) -> None:
+    key = program_cache_key(f'{instruction}\n{theme}')
+    if not key or not segments:
+        return
+    urls = extract_urls(f'{instruction}\n{theme}')
+    PROGRAM_CACHE.mkdir(parents=True, exist_ok=True)
+    safe_segments = []
+    for item in segments:
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get('text') or '').strip()
+        if not text:
+            continue
+        safe_segments.append({
+            'title': str(item.get('title') or '').strip(),
+            'text': text,
+            'source': str(item.get('source') or '').strip(),
+            'theme': theme,
+        })
+    if not safe_segments:
+        return
+    write_json(PROGRAM_CACHE / f'{key}.json', {
+        'cache_key': key,
+        'urls': urls,
+        'theme': theme,
+        'instruction': instruction,
+        'segments': safe_segments[:20],
+        'research': research,
+        'created_at': time.strftime('%Y-%m-%dT%H:%M:%S%z'),
+        'updated_at': time.strftime('%Y-%m-%dT%H:%M:%S%z'),
+    })
+    log_event('program_cache_saved', key=key, url_count=len(urls), segment_count=len(safe_segments))
 
 
 def extract_github_repos(text: str) -> list[str]:
@@ -931,6 +974,7 @@ def main() -> None:
         )
         update_state(research_status='scripting', last_research=research)
         segments = build_segments(theme, profile, research, instruction=instruction, ignore_profile_script=ignore_profile_script)
+        write_program_cache(theme, instruction, research, segments)
         append_queue(segments)
         start_tts_prefetch(segments, 'worker')
         log_event('segments_appended', theme=theme, count=len(segments), sources=sorted({str(s.get('source')) for s in segments}))

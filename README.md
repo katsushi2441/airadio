@@ -86,6 +86,10 @@ Background loop:
 2. The worker asks Kurage AgentReach/browser-use to search X when available.
 3. The worker asks Claude when available, then Ollama `gemma4:12b-it-qat` on `192.168.0.3`, to create calm but substantive radio scripts.
 4. New segments are appended to `storage/script_queue.json`.
+5. When the program is based on one or more URLs, the generated main-program
+   script is also saved under `storage/program_cache/` by URL-set hash. Starting
+   the same URL program later reuses the saved main script immediately instead
+   of waiting for research and LLM generation again.
 
 Comment loop:
 
@@ -120,14 +124,13 @@ program must follow the instruction text first.
 
 ## Voice / TTS
 
-AIRadio uses the same Kurage-standard TTS path as the broader Kurage VTuber
+AIRadio uses the same Kurage-standard TTS path as the broader Kurage video
 tooling instead of browser `speechSynthesis`.
 
-- Script: `/home/kojima/work/kvtuber/scripts/kurage-edge-tts.py`
-- HTTP endpoint: `AIRADIO_TTS_ENDPOINT` or `http://exbridge.ddns.net:18308/kurage-tts/v1/audio/speech`
-- Voice: `ja-JP-NanamiNeural`
-- Rate: `+10%`
-- Pitch: `-15Hz`
+- Default HTTP endpoint: `AIRADIO_TTS_ENDPOINT` or `http://127.0.0.1:18303/tts/voicebox`
+- Default voice path: Kurage Voicebox through rqdb4ai, serialized by the Kurage API.
+- Fallback/local script path retained for PHP helper compatibility: `/home/kojima/work/kvtuber/scripts/kurage-edge-tts.py`
+- Legacy edge voice settings: `ja-JP-NanamiNeural`, `+10%`, `-15Hz`
 - Pronunciation normalization: `/home/kojima/work/kurage/backend/tts_normalizer.py`
 
 
@@ -166,6 +169,7 @@ AIRadio avoids long silent gaps by warming TTS audio ahead of playback:
 - Fixed pre-roll copy is split into short cache-friendly segments, roughly enough to cover several minutes of first-script generation. If the TTS endpoint is backed by Voicebox, the first generation can still be slow, but repeated starts should reuse cached audio instead of regenerating the same sponsor/show introduction.
 - `airadio_worker.py` also starts `tts_prefetch.php` after adding newly generated segments.
 - The browser prefetches the next few queued segments while the current segment is playing.
+- TTS audio is cached under `storage/tts/` by endpoint, voice settings, and text. For URL programs, the main script cache plus the audio cache lets the same URL program be reused repeatedly without re-running both LLM script generation and Voicebox synthesis.
 - If all prepared content runs dry before script generation finishes, the UI falls back to a silent `台本作成中` preparation state.
 
 ## YouTube Live

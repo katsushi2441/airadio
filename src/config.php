@@ -24,7 +24,7 @@ const AIRADIO_TTS_PITCH = '-15Hz';
 const AIRADIO_TTS_PREFETCH_LIMIT = 4;
 const AIRADIO_PHP_BINARY = 'php';
 if (!defined('AIRADIO_TTS_ENDPOINT')) {
-    define('AIRADIO_TTS_ENDPOINT', getenv('AIRADIO_TTS_ENDPOINT') ?: 'http://exbridge.ddns.net:18308/kurage-tts/v1/audio/speech');
+    define('AIRADIO_TTS_ENDPOINT', getenv('AIRADIO_TTS_ENDPOINT') ?: 'http://127.0.0.1:18303/tts/voicebox');
 }
 
 if (!defined('AIGM_BASE_URL')) { define('AIGM_BASE_URL', 'https://airadio.exbridge.jp'); }

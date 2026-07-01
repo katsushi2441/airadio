@@ -30,13 +30,15 @@ WORKER_PAYLOAD = STORAGE / 'worker_payload.json'
 LOG = STORAGE / 'radio_loop.log'
 TTS_CACHE = STORAGE / 'tts'
 PREVIEW_CACHE = STORAGE / 'previews'
+PROGRAM_CACHE = STORAGE / 'program_cache'
 ALLOWED_USER = os.environ.get('AIRADIO_ALLOWED_USER', 'xb_bittensor')
-TTS_ENDPOINT = os.environ.get('AIRADIO_TTS_ENDPOINT', 'http://exbridge.ddns.net:18308/kurage-tts/v1/audio/speech')
+TTS_ENDPOINT = os.environ.get('AIRADIO_TTS_ENDPOINT', 'http://127.0.0.1:18303/tts/voicebox')
 PUBLIC_BASE_URL = os.environ.get('AIRADIO_PUBLIC_BASE_URL', 'https://airadio.exbridge.jp/airadio.php')
 TTS_VOICE = os.environ.get('AIRADIO_TTS_VOICE', 'ja-JP-NanamiNeural')
 TTS_RATE = os.environ.get('AIRADIO_TTS_RATE', '+10%')
 TTS_PITCH = os.environ.get('AIRADIO_TTS_PITCH', '-15Hz')
 TTS_SPEED = float(os.environ.get('AIRADIO_TTS_SPEED', '1.1'))
+TTS_TIMEOUT = int(os.environ.get('AIRADIO_TTS_TIMEOUT', '660'))
 TTS_PREFETCH_LIMIT = int(os.environ.get('AIRADIO_TTS_PREFETCH_LIMIT', '4'))
 SCRIPT_QUEUE_REFILL_THRESHOLD = int(os.environ.get('AIRADIO_SCRIPT_QUEUE_REFILL_THRESHOLD', '2'))
 SCRIPT_REFILL_MIN_INTERVAL = int(os.environ.get('AIRADIO_SCRIPT_REFILL_MIN_INTERVAL', '90'))
@@ -116,6 +118,12 @@ def queue() -> dict[str, Any]:
     return q
 
 
+def write_queue_items(items: list[dict[str, Any]]) -> dict[str, Any]:
+    q = {'items': items, 'updated_at': now_iso()}
+    write_json(QUEUE, q)
+    return q
+
+
 def current() -> dict[str, Any]:
     return read_json(CURRENT, {'item': None, 'updated_at': ''})
 
@@ -171,6 +179,46 @@ def extract_urls(text: str, limit: int = 12) -> list[str]:
         if len(cleaned) >= limit:
             break
     return cleaned
+
+
+def program_cache_key(text: str) -> str:
+    urls = extract_urls(text)
+    if not urls:
+        return ''
+    return sha256('\n'.join(urls).encode('utf-8')).hexdigest()
+
+
+def load_program_cache(text: str) -> dict[str, Any]:
+    key = program_cache_key(text)
+    if not key:
+        return {}
+    data = read_json(PROGRAM_CACHE / f'{key}.json', {})
+    items = data.get('segments') if isinstance(data, dict) else None
+    if not isinstance(items, list) or not items:
+        return {}
+    return data
+
+
+def clone_cached_segments(cache: dict[str, Any], theme: str) -> list[dict[str, Any]]:
+    items = cache.get('segments') if isinstance(cache, dict) else []
+    now = int(time.time())
+    cloned: list[dict[str, Any]] = []
+    for i, item in enumerate(items):
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get('text') or '').strip()
+        if not text:
+            continue
+        cloned.append({
+            **item,
+            'id': f'cached-{now}-{i}',
+            'theme': theme,
+            'requested_theme': theme,
+            'source': f"cache:{item.get('source') or 'segment'}",
+            'created_at': now_iso(),
+            'cached_from': cache.get('cache_key') or '',
+        })
+    return cloned
 
 
 def normalize_url_list(text: str) -> str:
@@ -418,6 +466,21 @@ def maybe_start_refill_worker(s: dict[str, Any], reason: str, queue_len: int) ->
     if last_refill and time.time() - last_refill < SCRIPT_REFILL_MIN_INTERVAL:
         return 0
     theme = str(s.get('theme') or 'AI思考')
+    cache = load_program_cache(theme)
+    cached_items = clone_cached_segments(cache, theme)
+    if cached_items:
+        q = queue()
+        existing = q.get('items') if isinstance(q.get('items'), list) else []
+        write_queue_items((existing + cached_items)[-80:])
+        update_state({
+            'research_status': 'cache_ready',
+            'last_refill_started_at': time.time(),
+            'last_refill_reason': f'{reason}:program_cache',
+            'program_cache_hit': True,
+            'program_cache_key': cache.get('cache_key') or program_cache_key(theme),
+        })
+        append_log('program_cache_refilled', {'reason': reason, 'count': len(cached_items), 'theme': theme})
+        return 0
     requested = str(s.get('requested_theme') or '')
     profile = fetch_x_profile(ALLOWED_USER)
     pid = start_worker(theme, profile, reason, {
@@ -490,7 +553,21 @@ def prepare_program_start(body: dict[str, Any], auth: dict[str, Any], reason: st
     # Use a prepared pre-roll instead of thin ad-lib bridge talk while the first
     # real script is generated in the background.
     items = preroll_program(theme, raw_theme, urls)
-    write_json(QUEUE, {'items': items, 'updated_at': now_iso()})
+    cache = load_program_cache(theme)
+    cached_items = clone_cached_segments(cache, theme)
+    if cached_items:
+        items = items + cached_items
+        new_state = update_state({
+            'research_status': 'cache_ready',
+            'loop_state': 'preroll',
+            'program_cache_hit': True,
+            'program_cache_key': cache.get('cache_key') or program_cache_key(theme),
+            'last_segments': len(cached_items),
+        })
+        write_queue_items(items)
+        append_log('program_cache_loaded', {'theme': theme, 'count': len(cached_items)})
+        return {'state': new_state, 'worker_pid': 0, 'prefetch_items': items[:TTS_PREFETCH_LIMIT]}
+    write_queue_items(items)
     instruction = '\n'.join(urls) if urls else raw_theme
     pid = start_worker(theme, profile, reason, {
         'instruction': instruction,
@@ -559,7 +636,7 @@ def audio_for_text(text: str) -> bytes:
     path = TTS_CACHE / f'{h}.mp3'
     if path.exists() and path.stat().st_size > 1000:
         return path.read_bytes()
-    res = requests.post(TTS_ENDPOINT, json={'input': text, 'voice': TTS_VOICE, 'speed': TTS_SPEED}, timeout=60)
+    res = requests.post(TTS_ENDPOINT, json={'input': text, 'voice': TTS_VOICE, 'speed': TTS_SPEED}, timeout=TTS_TIMEOUT)
     content_type = res.headers.get('content-type', '').lower()
     if res.status_code >= 400 or not content_type.startswith('audio/') or len(res.content) <= 1000:
         raise HTTPException(502, 'tts_failed')
