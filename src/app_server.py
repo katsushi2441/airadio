@@ -266,6 +266,77 @@ def seed_profile_program(theme: str) -> list[dict[str, Any]]:
     }]
 
 
+def preroll_program(theme: str, raw_theme: str, urls: list[str]) -> list[dict[str, Any]]:
+    ts = int(time.time())
+    topic = spoken_theme_title(theme, raw_theme)
+    source_note = (
+        f'今回指定された資料は{len(urls)}本です。' if len(urls) >= 2
+        else ('今回指定された資料を読み込みながら進めます。' if urls else '今回は編集者のプロフィールから番組の方向を組み立てます。')
+    )
+    rows = [
+        (
+            'Kurage Radioへようこそ',
+            f'こんばんは。Kurage AI VTuber Radioです。{source_note}最初の本編台本を裏側で作っているあいだ、まずはこの番組のことを短く紹介します。ここでは急がず、聞き流せるテンポで、AI時代の学び方や情報の見方をゆっくり整えていきます。',
+        ),
+        (
+            '番組のコンセプト',
+            'Kurage AI VTuber Radioのコンセプトは、聴きながらよく寝れる、AI思考のラジオです。画面をじっと見なくても、耳だけで学べること。難しい話題でも、眠りに入りやすい落ち着いた声と順番で、少しずつ理解できることを大切にしています。',
+        ),
+        (
+            'AI VTuberとしてのKurage',
+            'Kurageは、ただ台本を読むだけのアバターではありません。指定されたURL、プロフィール、ニュース、技術資料をもとに、裏側で情報を集め、要点を整理し、ラジオ番組として話すAI VTuberです。表では話し続け、裏では次の話題を準備する。この二重の流れがAIRadioの特徴です。',
+        ),
+        (
+            'スポンサー紹介',
+            'この番組は、株式会社エクスブリッジの技術開発から生まれました。エクスブリッジは、AI、OSS、動画生成、VTuber、SNS運用、業務自動化をつなげ、企業が情報発信と学習を継続できる仕組みを作っています。人が毎回がんばるのではなく、AIとシステムが支える発信基盤を形にしています。',
+        ),
+        (
+            'Kurageシリーズ',
+            'Kurageシリーズには、ブログやニュースを動画化するKurage、翻訳字幕や音声を扱うKurage Voice Pro、参照動画や記事を要約動画にするKurage Montage、ライブ配信を行うKurage AI VTuberなどがあります。AIRadioは、それらをラジオ体験としてつなぎ直したプロダクトです。',
+        ),
+        (
+            'Kurage AgentReach',
+            '情報収集では、Kurage AgentReachの考え方を使います。ひとつの資料だけをそのまま読むのではなく、必要に応じて関連するニュース、ブログ、SNS、技術情報を見に行きます。大切なのは、情報をたくさん並べることではなく、リスナーが理解しやすい順番に整理することです。',
+        ),
+        (
+            '動画とライブ配信',
+            'Kurageシリーズは、文章を動画にするだけでなく、ライブ配信や録画にもつながっています。話している内容は、そのままYouTube Liveのような配信にも使えます。つまり、学習ラジオを流しながら、あとで再利用できる長尺コンテンツも同時に作れるということです。',
+        ),
+        (
+            '裏側で起きていること',
+            f'いま裏側では、{topic}について、資料の取得、要点整理、台本生成を進めています。URLそのものを読み上げるのではなく、そこに書かれている内容、背景、使いどころ、注意点を読み解き、聞きやすい順番に並べ替えてから本編に入ります。',
+        ),
+        (
+            '学びながら休む',
+            'AIRadioが目指しているのは、情報を詰め込むことではありません。眠る前でも、作業中でも、散歩中でも、なんとなく聞いているうちに考え方が残る。そんな学び方です。重要なところはゆっくり繰り返し、細かすぎるところは無理に追わせません。',
+        ),
+        (
+            '聞き方のコツ',
+            'このラジオは、全部を覚えようとしなくて大丈夫です。気になった言葉だけ拾い、あとで必要なところを調べ直せば十分です。AI時代の学び方は、一度で完璧に理解することではなく、何度も触れながら自分の言葉にしていくことです。',
+        ),
+        (
+            'エクスブリッジの役割',
+            '株式会社エクスブリッジは、こうしたAI活用を実験で終わらせず、実際に動く業務システムや発信システムとして組み立てています。AIエージェント、動画生成、SNS投稿、ライブ配信、データ収集をつなぐことで、企業が継続的に学び、発信し、改善できる環境を作ります。',
+        ),
+        (
+            '本編への入り口',
+            'まもなく本編の台本が準備できたところから、Kurageがテーマに沿って話し始めます。もし最初の準備にもう少し時間がかかっても、この番組は止まらず、準備ができた順に自然につないでいきます。では、今夜のテーマを静かに始めていきましょう。',
+        ),
+    ]
+    items: list[dict[str, Any]] = []
+    for i, (title, text) in enumerate(rows):
+        items.append({
+            'id': f'preroll-{ts}-{i}',
+            'theme': theme,
+            'requested_theme': raw_theme,
+            'title': title,
+            'text': text,
+            'source': 'preroll',
+            'created_at': now_iso(),
+        })
+    return items
+
+
 def default_theme_from_profile(profile: dict[str, Any]) -> str:
     if (profile.get('description') or '').strip():
         return 'Xプロフィールに合わせて、編集者が関心を持つテーマを静かに深掘りする'
@@ -408,17 +479,17 @@ def prepare_program_start(body: dict[str, Any], auth: dict[str, Any], reason: st
         'duration_hours': hours,
         'started_at': now_iso(),
         'ends_at': time.strftime('%Y-%m-%dT%H:%M:%S%z', time.localtime(ts + hours * 3600)),
-        'loop_state': 'script_preparing',
+        'loop_state': 'preroll',
         'research_status': 'queued',
-        'now_talking': '台本作成中',
+        'now_talking': 'Kurage Radioへようこそ',
         'broadcaster': auth.get('session_user') or ALLOWED_USER,
         'requested_theme': raw_theme,
         'theme_guidance': guidance,
         'program_source': 'url' if urls else ('instruction' if has_instruction else 'profile'),
     })
-    # Do not speak thin opening/bridge text before the first real script exists.
-    # The UI shows "台本作成中" silently until the worker appends the first segment.
-    items: list[dict[str, Any]] = []
+    # Use a prepared pre-roll instead of thin ad-lib bridge talk while the first
+    # real script is generated in the background.
+    items = preroll_program(theme, raw_theme, urls)
     write_json(QUEUE, {'items': items, 'updated_at': now_iso()})
     instruction = '\n'.join(urls) if urls else raw_theme
     pid = start_worker(theme, profile, reason, {
@@ -427,7 +498,7 @@ def prepare_program_start(body: dict[str, Any], auth: dict[str, Any], reason: st
         'ignore_profile_script': has_instruction,
         'duration_hours': hours,
     })
-    return {'state': new_state, 'worker_pid': pid, 'prefetch_items': []}
+    return {'state': new_state, 'worker_pid': pid, 'prefetch_items': items[:TTS_PREFETCH_LIMIT]}
 
 
 def stop_youtube_live(reason: str = 'stop') -> dict[str, Any]:

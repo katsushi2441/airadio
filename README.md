@@ -16,10 +16,10 @@ It combines the Kurage project family into one live radio product:
 
 The most important product requirement is that the listener is not kept waiting.
 The VTuber keeps speaking in the foreground while research and script generation
-continue in the background. Before the first real script is ready, the UI shows
-`台本作成中` silently instead of reading thin bridge copy. After the first
-segment starts, AIRadio refills the script queue early so the radio can keep
-talking with fewer gaps.
+continue in the background. Before the first real script is ready, AIRadio plays
+a prepared pre-roll about the show, sponsor, and Kurage product family instead
+of reading thin ad-lib bridge copy. After the first segment starts, AIRadio
+refills the script queue early so the radio can keep talking with fewer gaps.
 
 Kurage AI VTuber Radio is also a content-production system for the sleep and
 learning video niche. Sleep-friendly long-form videos often grow because they
@@ -75,9 +75,10 @@ Foreground loop:
 2. If a script exists, the server consumes one shared queue item and writes it to `storage/current_segment.json`.
 3. Listener accounts poll `api.php?action=current` and speak the same current script without consuming the queue.
 4. If the editor is not on air, listener accounts stay in standby.
-5. If no script exists yet, the broadcaster shows `台本作成中` silently and keeps polling.
-6. When scripts exist, low queue depth triggers another background refill before the queue runs dry.
-7. The avatar mouth switches while speaking.
+5. If the first real script is not ready yet, the broadcaster plays the prepared pre-roll.
+6. If even the pre-roll runs dry, the broadcaster shows `台本作成中` silently and keeps polling.
+7. When scripts exist, low queue depth triggers another background refill before the queue runs dry.
+8. The avatar mouth switches while speaking.
 
 Background loop:
 
@@ -160,11 +161,12 @@ Apache/PHP host does not need local Python, edge-tts, or the kvtuber checkout.
 
 AIRadio avoids long silent gaps by warming TTS audio ahead of playback:
 
+- `start` queues a prepared pre-roll and asks the browser to prefetch the first few pre-roll audio files.
 - `interrupt`, `next`, and newly generated queue items warm TTS in the background.
-- `start` intentionally waits silently until the first real script exists, so it does not prefetch thin seed copy.
+- Fixed pre-roll copy is split into short cache-friendly segments, roughly enough to cover several minutes of first-script generation. If the TTS endpoint is backed by Voicebox, the first generation can still be slow, but repeated starts should reuse cached audio instead of regenerating the same sponsor/show introduction.
 - `airadio_worker.py` also starts `tts_prefetch.php` after adding newly generated segments.
 - The browser prefetches the next few queued segments while the current segment is playing.
-- The first segment uses a silent `台本作成中` preparation state because both script and audio generation can start cold.
+- If all prepared content runs dry before script generation finishes, the UI falls back to a silent `台本作成中` preparation state.
 
 ## YouTube Live
 
