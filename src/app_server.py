@@ -38,6 +38,8 @@ TTS_RATE = os.environ.get('AIRADIO_TTS_RATE', '+10%')
 TTS_PITCH = os.environ.get('AIRADIO_TTS_PITCH', '-15Hz')
 TTS_SPEED = float(os.environ.get('AIRADIO_TTS_SPEED', '1.1'))
 TTS_PREFETCH_LIMIT = int(os.environ.get('AIRADIO_TTS_PREFETCH_LIMIT', '4'))
+SCRIPT_QUEUE_REFILL_THRESHOLD = int(os.environ.get('AIRADIO_SCRIPT_QUEUE_REFILL_THRESHOLD', '2'))
+SCRIPT_REFILL_MIN_INTERVAL = int(os.environ.get('AIRADIO_SCRIPT_REFILL_MIN_INTERVAL', '90'))
 KVTUBER_CONTROL_BASE = os.environ.get('AIRADIO_KVTUBER_CONTROL_BASE', 'http://127.0.0.1:18308').rstrip('/')
 KVTUBER_ADMIN_TOKEN = os.environ.get('AIRADIO_KVTUBER_ADMIN_TOKEN', os.environ.get('KURAGE_ADMIN_TOKEN', ''))
 KVTUBER_ROOT = Path(os.environ.get('AIRADIO_KVTUBER_ROOT', '/home/kojima/work/kvtuber'))
@@ -335,6 +337,32 @@ def start_worker(theme: str, profile: dict[str, Any], reason: str, extra: dict[s
     return proc.pid
 
 
+def maybe_start_refill_worker(s: dict[str, Any], reason: str, queue_len: int) -> int:
+    """Start background script generation before the radio runs dry."""
+    if s.get('research_status') in {'queued', 'collecting', 'scripting'}:
+        return 0
+    if queue_len > SCRIPT_QUEUE_REFILL_THRESHOLD:
+        return 0
+    last_refill = float(s.get('last_refill_started_at') or 0)
+    if last_refill and time.time() - last_refill < SCRIPT_REFILL_MIN_INTERVAL:
+        return 0
+    theme = str(s.get('theme') or 'AI思考')
+    requested = str(s.get('requested_theme') or '')
+    profile = fetch_x_profile(ALLOWED_USER)
+    pid = start_worker(theme, profile, reason, {
+        'instruction': requested if requested else theme,
+        'theme_guidance': str(s.get('theme_guidance') or theme_guidance(theme)),
+        'ignore_profile_script': bool(requested),
+        'duration_hours': int(s.get('duration_hours') or 1),
+    })
+    update_state({
+        'research_status': 'queued',
+        'last_refill_started_at': time.time(),
+        'last_refill_reason': reason,
+    })
+    return pid
+
+
 def start_duration_guard(s: dict[str, Any], reason: str = 'duration_elapsed') -> int:
     started_at = str(s.get('started_at') or '').strip()
     ends_at = str(s.get('ends_at') or '').strip()
@@ -380,17 +408,17 @@ def prepare_program_start(body: dict[str, Any], auth: dict[str, Any], reason: st
         'duration_hours': hours,
         'started_at': now_iso(),
         'ends_at': time.strftime('%Y-%m-%dT%H:%M:%S%z', time.localtime(ts + hours * 3600)),
-        'loop_state': 'speaking',
+        'loop_state': 'script_preparing',
         'research_status': 'queued',
+        'now_talking': '台本作成中',
         'broadcaster': auth.get('session_user') or ALLOWED_USER,
         'requested_theme': raw_theme,
         'theme_guidance': guidance,
         'program_source': 'url' if urls else ('instruction' if has_instruction else 'profile'),
     })
-    opening_title = (spoken_theme_title(theme, raw_theme) + 'を始めます') if has_instruction else 'オープニング'
-    opening_text = 'こんばんは。Kurage AI VTuber Radioです。' + (spoken_theme_title(theme, raw_theme) if has_instruction else spoken_theme_title(theme)) + 'について話します。'
-    opening = {'id': f'opening-{ts}', 'theme': theme, 'requested_theme': raw_theme, 'title': opening_title, 'text': opening_text, 'source': 'opening', 'created_at': now_iso()}
-    items = [opening] + (seed_url_program(urls) if urls else (seed_instruction_program(theme, raw_theme) if has_instruction else seed_profile_program(theme)))
+    # Do not speak thin opening/bridge text before the first real script exists.
+    # The UI shows "台本作成中" silently until the worker appends the first segment.
+    items: list[dict[str, Any]] = []
     write_json(QUEUE, {'items': items, 'updated_at': now_iso()})
     instruction = '\n'.join(urls) if urls else raw_theme
     pid = start_worker(theme, profile, reason, {
@@ -399,7 +427,7 @@ def prepare_program_start(body: dict[str, Any], auth: dict[str, Any], reason: st
         'ignore_profile_script': has_instruction,
         'duration_hours': hours,
     })
-    return {'state': new_state, 'worker_pid': pid, 'prefetch_items': items[:TTS_PREFETCH_LIMIT]}
+    return {'state': new_state, 'worker_pid': pid, 'prefetch_items': []}
 
 
 def stop_youtube_live(reason: str = 'stop') -> dict[str, Any]:
@@ -605,25 +633,38 @@ async def api_action(action: str, request: Request, x_airadio_auth: str | None =
         q = queue()
         items = q.get('items') or []
         item = items.pop(0) if items else None
-        bridge_count = int(s.get('bridge_count') or 0)
         if not item:
-            bridge_count += 1
-            spoken = spoken_theme_title(str(s.get('theme') or 'AI思考'))
-            texts = [
-                f'{spoken}について、次の台本を待つあいだに全体像を短く整理します。資料にあることと、まだ分からないことを分けて聞くと理解しやすくなります。',
-                f'{spoken}を別の角度から見ます。大事なのは、名前の印象ではなく、何を説明しようとしているのかを押さえることです。',
-                f'{spoken}の話を聞くときは、背景、仕組み、使いどころ、注意点に分けると、内容がほどけていきます。',
-            ]
-            item = {'id': f'bridge-{int(time.time())}', 'theme': s.get('theme'), 'title': f'補助線 {bridge_count}', 'text': texts[(bridge_count - 1) % len(texts)], 'source': 'bridge', 'created_at': now_iso()}
-            if s.get('research_status') not in {'collecting', 'scripting'}:
-                start_worker(str(s.get('theme') or 'AI思考'), fetch_x_profile(ALLOWED_USER), 'queue_empty')
+            pid = maybe_start_refill_worker(s, 'queue_empty', 0)
+            waiting_title = '台本作成中'
+            waiting_text = '最初の台本を作成しています。音声は流さず、準備ができ次第そのまま話し始めます。'
+            if current().get('item'):
+                waiting_title = '次の台本を準備中'
+                waiting_text = '次の台本をバックグラウンドで生成しています。準備でき次第、続きから再開します。'
+            update_state({
+                'now_talking': waiting_title,
+                'loop_state': 'script_preparing',
+                'research_status': 'queued' if pid else s.get('research_status', 'queued'),
+            })
+            return {
+                'ok': True,
+                'waiting': True,
+                'item': None,
+                'message': waiting_text,
+                'title': waiting_title,
+                'current': current(),
+                'queue_remaining': 0,
+                'prefetch_items': [],
+                'state': state(),
+                'worker_pid': pid,
+            }
         q['items'] = items
         q['updated_at'] = now_iso()
         write_json(QUEUE, q)
         cur = write_current(item)
+        refill_pid = maybe_start_refill_worker(s, 'queue_low', len(items))
         patch = {'now_talking': item.get('title') or '', 'loop_state': 'speaking'}
-        if bridge_count:
-            patch['bridge_count'] = bridge_count
+        if refill_pid:
+            patch['research_status'] = 'queued'
         update_state(patch)
         upcoming = items[:TTS_PREFETCH_LIMIT]
         return {'ok': True, 'item': item, 'current': cur, 'queue_remaining': len(items), 'prefetch_items': upcoming, 'state': state()}

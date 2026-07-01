@@ -82,7 +82,7 @@ let lastPreviewUrl = '';
 const audioCache = new Map();
 const audioPrefetching = new Set();
 const audioPromises = new Map();
-const bridgeTexts = ['少しだけ、静かな間を置きます。考えは急がなくて大丈夫です。','裏側で情報を集めています。こちらでは、今のテーマをゆっくりほどいていきます。'];
+const waitingText = '台本を作成しています。音声は流さず、準備ができ次第そのまま話し始めます。';
 function extractUrls(text){ return [...new Set((text || '').match(/https?:\/\/[^\s「」『』"'`<>]+/g) || [])].map(u=>u.replace(/[。、.!！?)]）]+$/,'')); }
 function errorText(d){
   const detail = d?.detail;
@@ -204,10 +204,18 @@ function speakText(text, title=''){
 }
 async function radioLoop(){
   while(running && Date.now() < endsAt){
-    let d; try { d = await api('next'); } catch(e) { d = {item:{title:'ブリッジ',text:bridgeTexts[Math.floor(Math.random()*bridgeTexts.length)]}}; }
+    let d; try { d = await api('next'); } catch(e) { d = {waiting:true, title:'台本作成中', message:waitingText}; }
+    if (d?.waiting || !d?.item) {
+      nowTalking.textContent = d?.title || '台本作成中';
+      currentText.textContent = d?.message || waitingText;
+      setMouth(false);
+      prefetchItems(d?.prefetch_items || []);
+      await new Promise(r=>setTimeout(r, 2500));
+      continue;
+    }
     const item = d.item || {}; log(`${item.source||'segment'}: ${item.title||''}`);
     prefetchItems(d.prefetch_items || []);
-    await speakText(item.text || bridgeTexts[0], item.title || 'Kurage Radio');
+    await speakText(item.text || '', item.title || 'Kurage Radio');
     await new Promise(r=>setTimeout(r, 200));
   }
   running=false; nowTalking.textContent='終了しました'; setMouth(false);
@@ -224,10 +232,17 @@ async function listenerLoop(){
       await new Promise(r=>setTimeout(r, 3000));
       continue;
     }
+    if (!item && s.loop_state === 'script_preparing') {
+      nowTalking.textContent='台本作成中';
+      currentText.textContent=waitingText;
+      setMouth(false);
+      await new Promise(r=>setTimeout(r, 2500));
+      continue;
+    }
     if (item && item.id && item.id !== lastCurrentId) {
       lastCurrentId = item.id;
       log(`listen: ${item.title||''}`);
-      await speakText(item.text || bridgeTexts[0], item.title || 'Kurage Radio');
+      await speakText(item.text || '', item.title || 'Kurage Radio');
     } else {
       nowTalking.textContent=item?.title ? '配信中: '+item.title : '配信中';
       await new Promise(r=>setTimeout(r, 2000));
@@ -251,16 +266,17 @@ async function broadcastLoop(){
       break;
     }
     if (!d?.ok || !d.item) {
-      nowTalking.textContent='待機中';
-      currentText.textContent='編集者がラジオ開始すると、自動で台本を取得してYouTubeへ読み上げます。';
-      await new Promise(r=>setTimeout(r, 3000));
+      nowTalking.textContent=d?.title || '台本作成中';
+      currentText.textContent=d?.message || '編集者がラジオ開始すると、自動で台本を取得してYouTubeへ読み上げます。';
+      setMouth(false);
+      await new Promise(r=>setTimeout(r, 2500));
       continue;
     }
     const item = d.item || {};
     lastCurrentId = item.id || lastCurrentId;
     log(`broadcast: ${item.title||''}`);
     prefetchItems(d.prefetch_items || []);
-    await speakText(item.text || bridgeTexts[0], item.title || 'Kurage Radio');
+    await speakText(item.text || '', item.title || 'Kurage Radio');
     await new Promise(r=>setTimeout(r, 200));
   }
   setMouth(false);
@@ -285,7 +301,7 @@ function renderComments(items){
 async function refresh(){ try{ const d=await api('status'); const s=d.state||{}; const q=(d.queue?.items||[]).length; const current=d.current?.item; hasDefaultStreamKey = !!d.youtube?.has_default_stream_key; researchStatus.textContent=`research: ${s.research_status||'idle'} / tts: ${s.tts_status||'idle'} / queue: ${q} / ${s.status||'idle'}${hasDefaultStreamKey ? ' / YouTube key: saved' : ''}`; renderSchedule(s); renderSourcePreview(s, current); renderComments(d.comments?.items||[]); prefetchItems(d.queue?.items||[]); if(!running && current?.title){ nowTalking.textContent=current.title; currentText.textContent=current.text||''; } }catch(e){} }
 setInterval(refresh, 4000); refresh();
 if (IS_ADMIN) {
-  document.getElementById('startBtn').onclick=async()=>{ const theme=document.getElementById('theme').value.trim(); const hours=Number(document.getElementById('hours').value||1); nowTalking.textContent='初回音声を準備中'; currentText.textContent='最初の台本と音声を準備しています。ここだけ少し時間がかかります。始まった後は、次の音声をバックグラウンドで先読みして、できるだけ間が空かないようにします。'; const d=await api('start',{theme,duration_hours:hours}); prefetchItems(d.prefetch_items||[]); endsAt = Date.now()+hours*3600*1000; running=true; log('radio started'); radioLoop(); };
+  document.getElementById('startBtn').onclick=async()=>{ const theme=document.getElementById('theme').value.trim(); const hours=Number(document.getElementById('hours').value||1); nowTalking.textContent='台本作成中'; currentText.textContent='最初の本台本を作成しています。ここでは音声を流さず、準備ができてからKurageが話し始めます。開始後は、話している間に次の台本と音声を先読みします。'; setMouth(false); const d=await api('start',{theme,duration_hours:hours}); prefetchItems(d.prefetch_items||[]); endsAt = Date.now()+hours*3600*1000; running=true; log('radio started'); radioLoop(); };
   document.getElementById('interruptBtn').onclick=async()=>{ const theme=document.getElementById('theme').value.trim(); const urls=extractUrls(theme); if(!urls.length){ log('割込みテーマURLを1行1URLで入力してください'); return; } await api('interrupt',{theme:urls.join('\n')}); log('URL interrupt: '+urls.length+'件'); };
   document.getElementById('stopBtn').onclick=async()=>{ running=false; stopCurrentAudio(); await api('stop'); log('stopped'); nowTalking.textContent='停止中'; setMouth(false); };
   document.getElementById('youtubeStartBtn').onclick=async()=>{ const theme=document.getElementById('theme').value.trim(); const hours=Number(document.getElementById('hours').value||1); const stream_key=document.getElementById('streamKey').value.trim(); if(!stream_key && !hasDefaultStreamKey){ log('YouTube Live ストリームキーを入力してください'); return; } nowTalking.textContent='YouTube配信を準備中'; currentText.textContent=theme?'入力されたURL資料から番組を作り直して、配信用viewerへ流します。':'URLが空なので、編集者のXプロフィールから番組を作り直して、配信用viewerへ流します。'; const d=await api('youtube_start',{stream_key,viewer_url:broadcastUrl(),theme,duration_hours:hours}); if(d.ok){ prefetchItems(d.program?.prefetch_items||[]); endsAt=Date.now()+hours*3600*1000; log(theme?'URL番組でYouTube配信を開始しました':'プロフィール番組でYouTube配信を開始しました'); } else { log('YouTube配信開始に失敗しました: '+errorText(d)); } };
