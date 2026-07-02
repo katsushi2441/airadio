@@ -26,7 +26,9 @@ header{position:sticky;top:0;z-index:40;
   background:rgba(255,255,255,.82);backdrop-filter:blur(16px);
   border-bottom:1px solid var(--line);
   display:flex;align-items:center;justify-content:space-between;
-  padding:12px 28px;gap:12px}
+  padding:10px 28px;gap:14px}
+.horynth{flex:0 0 auto;line-height:0}
+.horynth img{height:36px;width:auto;display:block}
 .hbrand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:16px;color:var(--ink)}
 .hbrand .orb{width:32px;height:32px;border-radius:50%;
   background:radial-gradient(circle at 35% 30%,#cdf5fb,#62c8de 55%,#2aa8c7);
@@ -152,12 +154,15 @@ footer{background:rgba(255,255,255,.7);border-top:1px solid var(--line);padding:
 <body>
 
 <header>
+  <a class="horynth" href="https://orynth.dev/projects/airadio" target="_blank" rel="noopener">
+    <img src="https://orynth.dev/api/badge/airadio?theme=light&style=default" alt="Featured on Orynth">
+  </a>
   <a class="hbrand" href="airadio.html">
     <span class="orb"></span>
     <span>Kurage AI Radio<sub>VTuber DJ Radio</sub></span>
   </a>
   <div class="hactions">
-    <a class="btn btn-ghost" href="index.html">旧バージョン</a>
+    <a class="btn btn-ghost" href="index.html">English</a>
     <a class="btn btn-primary" href="airadio.php">ラジオを聴く →</a>
   </div>
 </header>
@@ -330,7 +335,7 @@ footer{background:rgba(255,255,255,.7);border-top:1px solid var(--line);padding:
   <div class="footer-brand">© 2026 EXBRIDGE,Inc. — Kurage AI VTuber Radio</div>
   <div class="footer-links">
     <a href="airadio.php">ラジオを聴く</a>
-    <a href="index.html">旧バージョン</a>
+    <a href="index.html">English</a>
   </div>
 </footer>
 
