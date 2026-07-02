@@ -201,6 +201,8 @@ def load_program_cache(text: str) -> dict[str, Any]:
 
 def clone_cached_segments(cache: dict[str, Any], theme: str) -> list[dict[str, Any]]:
     items = cache.get('segments') if isinstance(cache, dict) else []
+    if not isinstance(items, list):
+        items = []
     now = int(time.time())
     cloned: list[dict[str, Any]] = []
     for i, item in enumerate(items):
